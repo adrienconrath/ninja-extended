@@ -22,6 +22,7 @@
 #include "depfile_parser.h"
 #include "deps_log.h"
 #include "disk_interface.h"
+#include "file_monitor.h"
 #include "manifest_parser.h"
 #include "metrics.h"
 #include "state.h"
@@ -131,7 +132,7 @@ bool DependencyScan::RecomputeDirty(Edge* edge, string* err) {
 }
 
 bool DependencyScan::RecomputeOutputsDirty(Edge* edge,
-                                           Node* most_recent_input) {   
+                                           Node* most_recent_input) {
   string command = edge->EvaluateCommand(true);
   for (vector<Node*>::iterator i = edge->outputs_.begin();
        i != edge->outputs_.end(); ++i) {
@@ -380,7 +381,7 @@ bool ImplicitDepLoader::LoadDepFile(Edge* edge, const string& path,
 
     Node* node = state_->GetNode(*i);
     *implicit_dep = node;
-    node->AddOutEdge(edge);
+    node->AddOutEdge(edge, false);
     CreatePhonyInEdge(node);
   }
 
@@ -408,7 +409,7 @@ bool ImplicitDepLoader::LoadDepsFromLog(Edge* edge, string* err) {
   for (int i = 0; i < deps->node_count; ++i, ++implicit_dep) {
     Node* node = deps->nodes[i];
     *implicit_dep = node;
-    node->AddOutEdge(edge);
+    node->AddOutEdge(edge, false);
     CreatePhonyInEdge(node);
   }
   return true;
@@ -425,6 +426,13 @@ vector<Node*>::iterator ImplicitDepLoader::PreallocateSpace(Edge* edge,
 void ImplicitDepLoader::CreatePhonyInEdge(Node* node) {
   if (node->in_edge())
     return;
+
+  if (!node->monitored())
+  {
+    string err;
+    if (!file_monitor_->MonitorNode(node, &err))
+      Error("%s", err.c_str());
+  }
 
   Edge* phony_edge = state_->AddEdge(&State::kPhonyRule);
   node->set_in_edge(phony_edge);

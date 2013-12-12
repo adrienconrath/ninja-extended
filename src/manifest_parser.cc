@@ -255,6 +255,8 @@ bool ManifestParser::ParseEdge(string* err) {
   if (!rule)
     return lexer_.Error("unknown build rule '" + rule_name + "'", err);
 
+  // Add all explicit deps, counting how many as we go.
+  int explicit_deps = 0;
   for (;;) {
     // XXX should we require one path here?
     EvalString in;
@@ -263,6 +265,7 @@ bool ManifestParser::ParseEdge(string* err) {
     if (in.empty())
       break;
     ins.push_back(in);
+    ++explicit_deps;
   }
 
   // Add all implicit deps, counting how many as we go.
@@ -319,12 +322,14 @@ bool ManifestParser::ParseEdge(string* err) {
     edge->pool_ = pool;
   }
 
+  int index = 0;
   for (vector<EvalString>::iterator i = ins.begin(); i != ins.end(); ++i) {
     string path = i->Evaluate(env);
     string path_err;
     if (!CanonicalizePath(&path, &path_err))
       return lexer_.Error(path_err, err);
-    state_->AddIn(edge, path);
+    state_->AddIn(edge, path, (index >= explicit_deps + implicit));
+    index++;
   }
   for (vector<EvalString>::iterator i = outs.begin(); i != outs.end(); ++i) {
     string path = i->Evaluate(env);

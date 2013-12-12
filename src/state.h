@@ -98,7 +98,7 @@ struct State {
   Node* LookupNode(StringPiece path);
   Node* SpellcheckNode(const string& path);
 
-  void AddIn(Edge* edge, StringPiece path);
+  void AddIn(Edge* edge, StringPiece path, bool is_order_only);
   void AddOut(Edge* edge, StringPiece path);
   bool AddDefault(StringPiece path, string* error);
 

@@ -29,6 +29,7 @@
 #include "depfile_parser.h"
 #include "deps_log.h"
 #include "disk_interface.h"
+#include "file_monitor.h"
 #include "graph.h"
 #include "msvc_helper.h"
 #include "state.h"
@@ -251,7 +252,8 @@ void BuildStatus::PrintStatus(Edge* edge) {
                  force_full_command ? LinePrinter::FULL : LinePrinter::ELIDE);
 }
 
-Plan::Plan() : command_edges_(0), wanted_edges_(0) {}
+Plan::Plan(FileMonitor* file_monitor)
+  : file_monitor_(file_monitor), command_edges_(0), wanted_edges_(0) {}
 
 bool Plan::AddTarget(Node* node, string* err) {
   vector<Node*> stack;
@@ -379,6 +381,17 @@ void Plan::EdgeFinished(Edge* edge) {
 }
 
 void Plan::NodeFinished(Node* node) {
+  node->set_dirty(false);
+
+  if (!node->in_edge() || (node->in_edge()->is_phony()
+    && node->in_edge()->inputs_.empty()))
+  {
+    // The node needs to be monitored again.
+    string err;
+    if (!file_monitor_->MonitorNode(node, &err))
+      Error("%s", err.c_str());
+  }
+
   // See if we we want any edges from this node.
   for (vector<Edge*>::const_iterator i = node->out_edges().begin();
        i != node->out_edges().end(); ++i) {
@@ -517,9 +530,10 @@ bool RealCommandRunner::WaitForCommand(Result* result) {
 
 Builder::Builder(State* state, const BuildConfig& config,
                  BuildLog* build_log, DepsLog* deps_log,
-                 DiskInterface* disk_interface)
-    : state_(state), config_(config), disk_interface_(disk_interface),
-      scan_(state, build_log, deps_log, disk_interface) {
+                 DiskInterface* disk_interface, FileMonitor* file_monitor)
+    : state_(state), config_(config), plan_(file_monitor),
+      disk_interface_(disk_interface), file_monitor_(file_monitor),
+      scan_(state, build_log, deps_log, disk_interface, file_monitor) {
   status_ = new BuildStatus(config);
 }
 

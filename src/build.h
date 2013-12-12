@@ -32,6 +32,7 @@
 struct BuildLog;
 struct BuildStatus;
 struct DiskInterface;
+struct FileMonitor;
 struct Edge;
 struct Node;
 struct State;
@@ -39,7 +40,7 @@ struct State;
 /// Plan stores the state of a build plan: what we intend to build,
 /// which steps we're ready to execute.
 struct Plan {
-  Plan();
+  Plan(FileMonitor* file_monitor);
 
   /// Add a target to our plan (including all its dependencies).
   /// Returns false if we don't need to build this target; may
@@ -80,6 +81,8 @@ private:
   /// For example, if |edge| is a member of a pool, calling this may schedule
   /// previously pending jobs in that pool.
   void ResumeDelayedJobs(Edge* edge);
+
+  FileMonitor* file_monitor_;
 
   /// Keep track of which edges we want to build in this plan.  If this map does
   /// not contain an entry for an edge, we do not want to build the entry or its
@@ -143,7 +146,7 @@ struct BuildConfig {
 struct Builder {
   Builder(State* state, const BuildConfig& config,
           BuildLog* build_log, DepsLog* deps_log,
-          DiskInterface* disk_interface);
+          DiskInterface* disk_interface, FileMonitor* file_monitor);
   ~Builder();
 
   /// Clean up after interrupted commands by deleting output files.
@@ -184,6 +187,7 @@ struct Builder {
                    vector<Node*>* deps_nodes, string* err);
 
   DiskInterface* disk_interface_;
+  FileMonitor* file_monitor_;
   DependencyScan scan_;
 
   // Unimplemented copy ctor and operator= ensure we don't copy the auto_ptr.

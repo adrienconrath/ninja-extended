@@ -114,6 +114,7 @@ Node* State::GetNode(StringPiece path) {
   if (node)
     return node;
   node = new Node(path.AsString());
+
   paths_[node->path()] = node;
   return node;
 }
@@ -143,10 +144,10 @@ Node* State::SpellcheckNode(const string& path) {
   return result;
 }
 
-void State::AddIn(Edge* edge, StringPiece path) {
+void State::AddIn(Edge* edge, StringPiece path, bool is_order_only) {
   Node* node = GetNode(path);
   edge->inputs_.push_back(node);
-  node->AddOutEdge(edge);
+  node->AddOutEdge(edge, is_order_only);
 }
 
 void State::AddOut(Edge* edge, StringPiece path) {

@@ -19,15 +19,17 @@
 #include <string.h>
 
 #ifdef _WIN32
+#error WIN32 not supported yet
+
 #include "getopt.h"
 #include <direct.h>
 #include <windows.h>
 #else
 #include <getopt.h>
 #include <unistd.h>
+#include <signal.h>
 #endif
 
-#include "browse.h"
 #include "build.h"
 #include "build_log.h"
 #include "deps_log.h"
@@ -37,6 +39,7 @@
 #include "graph.h"
 #include "graphviz.h"
 #include "manifest_parser.h"
+#include "file_monitor.h"
 #include "metrics.h"
 #include "state.h"
 #include "util.h"
@@ -49,6 +52,11 @@ int MSVCHelperMain(int argc, char** argv);
 // Defined in minidump-win32.cc.
 void CreateWin32MiniDump(_EXCEPTION_POINTERS* pep);
 #endif
+
+void sigterm_handler(int signum)
+{
+  // This causes the monitor to stop waiting
+}
 
 namespace {
 
@@ -70,7 +78,7 @@ struct Options {
 /// to poke into these, so store them as fields on an object.
 struct NinjaMain {
   NinjaMain(const char* ninja_command, const BuildConfig& config) :
-      ninja_command_(ninja_command), config_(config) {}
+      ninja_command_(ninja_command), config_(config), file_monitor_(&state_) {}
 
   /// Command line used to run Ninja.
   const char* ninja_command_;
@@ -90,6 +98,8 @@ struct NinjaMain {
   BuildLog build_log_;
   DepsLog deps_log_;
 
+  FileMonitor file_monitor_;
+
   /// The type of functions that are the entry points to tools (subcommands).
   typedef int (NinjaMain::*ToolFunc)(int, char**);
 
@@ -105,7 +115,6 @@ struct NinjaMain {
   int ToolGraph(int argc, char* argv[]);
   int ToolQuery(int argc, char* argv[]);
   int ToolDeps(int argc, char* argv[]);
-  int ToolBrowse(int argc, char* argv[]);
   int ToolMSVC(int argc, char* argv[]);
   int ToolTargets(int argc, char* argv[]);
   int ToolCommands(int argc, char* argv[]);
@@ -222,7 +231,8 @@ bool NinjaMain::RebuildManifest(const char* input_file, string* err) {
   if (!node)
     return false;
 
-  Builder builder(&state_, config_, &build_log_, &deps_log_, &disk_interface_);
+  Builder builder(&state_, config_, &build_log_, &deps_log_, &disk_interface_,
+    &file_monitor_);
   if (!builder.AddTarget(node, err))
     return false;
 
@@ -350,18 +360,6 @@ int NinjaMain::ToolQuery(int argc, char* argv[]) {
   }
   return 0;
 }
-
-#if !defined(_WIN32) && !defined(NINJA_BOOTSTRAP)
-int NinjaMain::ToolBrowse(int argc, char* argv[]) {
-  if (argc < 1) {
-    Error("expected a target to browse");
-    return 1;
-  }
-  RunBrowsePython(&state_, ninja_command_, argv[0]);
-  // If we get here, the browse failed.
-  return 1;
-}
-#endif  // _WIN32
 
 #if defined(_MSC_VER)
 int NinjaMain::ToolMSVC(int argc, char* argv[]) {
@@ -684,10 +682,6 @@ int NinjaMain::ToolUrtle(int argc, char** argv) {
 /// Returns a Tool, or NULL if Ninja should exit.
 const Tool* ChooseTool(const string& tool_name) {
   static const Tool kTools[] = {
-#if !defined(_WIN32) && !defined(NINJA_BOOTSTRAP)
-    { "browse", "browse dependency graph in a web browser",
-      Tool::RUN_AFTER_LOAD, &NinjaMain::ToolBrowse },
-#endif
 #if defined(_MSC_VER)
     { "msvc", "build helper for MSVC cl.exe (EXPERIMENTAL)",
       Tool::RUN_AFTER_FLAGS, &NinjaMain::ToolMSVC },
@@ -870,7 +864,8 @@ int NinjaMain::RunBuild(int argc, char** argv) {
     return 1;
   }
 
-  Builder builder(&state_, config_, &build_log_, &deps_log_, &disk_interface_);
+  Builder builder(&state_, config_, &build_log_, &deps_log_, &disk_interface_,
+    &file_monitor_);
   for (size_t i = 0; i < targets.size(); ++i) {
     if (!builder.AddTarget(targets[i], &err)) {
       if (!err.empty()) {
@@ -1036,47 +1031,57 @@ int real_main(int argc, char** argv) {
     }
   }
 
-  // The build can take up to 2 passes: one to rebuild the manifest, then
-  // another to build the desired target.
-  for (int cycle = 0; cycle < 2; ++cycle) {
-    NinjaMain ninja(ninja_command, config);
+  NinjaMain ninja(ninja_command, config);
 
-    RealFileReader file_reader;
-    ManifestParser parser(&ninja.state_, &file_reader);
-    string err;
-    if (!parser.Load(options.input_file, &err)) {
-      Error("%s", err.c_str());
+  RealFileReader file_reader;
+  ManifestParser parser(&ninja.state_, &file_reader);
+  string err;
+  if (!parser.Load(options.input_file, &err)) {
+    Error("%s", err.c_str());
+    return 1;
+  }
+
+  if (options.tool && options.tool->when == Tool::RUN_AFTER_LOAD)
+    return (ninja.*options.tool->func)(argc, argv);
+
+  if (!ninja.EnsureBuildDirExists())
+    return 1;
+
+  if (!ninja.OpenBuildLog() || !ninja.OpenDepsLog())
+    return 1;
+
+  if (options.tool && options.tool->when == Tool::RUN_AFTER_LOGS)
+    return (ninja.*options.tool->func)(argc, argv);
+
+  if (!ninja.file_monitor_.Load(&err)) {
+    Error("%s", err.c_str());
+    return 1;
+  }
+
+  while (true) {
+
+    if (!ninja.file_monitor_.Wait()) {
+      Error("%s", "Error while waiting for file events");
       return 1;
     }
 
-    if (options.tool && options.tool->when == Tool::RUN_AFTER_LOAD)
-      return (ninja.*options.tool->func)(argc, argv);
-
-    if (!ninja.EnsureBuildDirExists())
+    if (ninja.RebuildManifest(options.input_file, &err)) {
+      // Not handled yet.
+      Error("Manifest has changed, this is not implemented yet.");
+      return 3;
+    } else if (!err.empty()) {
+      Error("rebuilding '%s': %s", options.input_file, err.c_str());
       return 1;
-
-    if (!ninja.OpenBuildLog() || !ninja.OpenDepsLog())
-      return 1;
-
-    if (options.tool && options.tool->when == Tool::RUN_AFTER_LOGS)
-      return (ninja.*options.tool->func)(argc, argv);
-
-    // The first time through, attempt to rebuild the manifest before
-    // building anything else.
-    if (cycle == 0) {
-      if (ninja.RebuildManifest(options.input_file, &err)) {
-        // Start the build over with the new manifest.
-        continue;
-      } else if (!err.empty()) {
-        Error("rebuilding '%s': %s", options.input_file, err.c_str());
-        return 1;
-      }
     }
 
     int result = ninja.RunBuild(argc, argv);
     if (g_metrics)
       ninja.DumpMetrics();
-    return result;
+
+    if (result != 0)
+      Error("Error while running build");
+    else
+      printf("Done building.\n");
   }
 
   return 1;  // Shouldn't be reached.
@@ -1100,6 +1105,7 @@ int main(int argc, char** argv) {
     return 2;
   }
 #else
+  signal(SIGINT, sigterm_handler);
   return real_main(argc, argv);
 #endif
 }

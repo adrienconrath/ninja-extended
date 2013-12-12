@@ -24,6 +24,7 @@ using namespace std;
 
 struct BuildLog;
 struct DiskInterface;
+struct FileMonitor;
 struct DepsLog;
 struct Edge;
 struct Node;
@@ -37,6 +38,7 @@ struct Node {
       : path_(path),
         mtime_(-1),
         dirty_(false),
+	monitored_(false),
         in_edge_(NULL),
         id_(-1) {}
 
@@ -77,6 +79,10 @@ struct Node {
   void set_dirty(bool dirty) { dirty_ = dirty; }
   void MarkDirty() { dirty_ = true; }
 
+  bool monitored() const { return monitored_; }
+  void set_monitored(bool monitored) { monitored_ = monitored; }
+  void MarkMonitored() { monitored_ = true; }
+
   Edge* in_edge() const { return in_edge_; }
   void set_in_edge(Edge* edge) { in_edge_ = edge; }
 
@@ -84,7 +90,14 @@ struct Node {
   void set_id(int id) { id_ = id; }
 
   const vector<Edge*>& out_edges() const { return out_edges_; }
-  void AddOutEdge(Edge* edge) { out_edges_.push_back(edge); }
+  const vector<Edge*>& not_order_only_out_edges() const {
+    return not_order_only_out_edges_;
+  }
+  void AddOutEdge(Edge* edge, bool is_order_only) {
+    out_edges_.push_back(edge);
+    if (!is_order_only)
+      not_order_only_out_edges_.push_back(edge);
+  }
 
   void Dump(const char* prefix="") const;
 
@@ -101,12 +114,19 @@ private:
   /// edges to build.
   bool dirty_;
 
+  /// Monitored is true when the leaves that depend on this node (or this node
+  /// itsel if it is a leaf) have been set for monitoring.
+  bool monitored_;
+
   /// The Edge that produces this Node, or NULL when there is no
   /// known edge to produce it.
   Edge* in_edge_;
 
   /// All Edges that use this Node as an input.
   vector<Edge*> out_edges_;
+
+  /// All Edges that use this Node as an input and are not order only.
+  vector<Edge*> not_order_only_out_edges_;
 
   /// A dense integer id for the node, assigned and used by DepsLog.
   int id_;
@@ -157,6 +177,7 @@ struct Edge {
   vector<Node*> outputs_;
   BindingEnv* env_;
   bool outputs_ready_;
+  /// TODO: the file monitor should update this field when a file is deleted.
   bool deps_missing_;
 
   const Rule& rule() const { return *rule_; }
@@ -190,8 +211,9 @@ struct Edge {
 /// "depfile" attribute in build files.
 struct ImplicitDepLoader {
   ImplicitDepLoader(State* state, DepsLog* deps_log,
-                    DiskInterface* disk_interface)
-      : state_(state), disk_interface_(disk_interface), deps_log_(deps_log) {}
+                    DiskInterface* disk_interface, FileMonitor* file_monitor)
+      : state_(state), disk_interface_(disk_interface),
+      file_monitor_(file_monitor), deps_log_(deps_log) {}
 
   /// Load implicit dependencies for \a edge.
   /// @return false on error (without filling \a err if info is just missing
@@ -222,6 +244,7 @@ struct ImplicitDepLoader {
 
   State* state_;
   DiskInterface* disk_interface_;
+  FileMonitor* file_monitor_;
   DepsLog* deps_log_;
 };
 
@@ -230,10 +253,10 @@ struct ImplicitDepLoader {
 /// and updating the dirty/outputs_ready state of all the nodes and edges.
 struct DependencyScan {
   DependencyScan(State* state, BuildLog* build_log, DepsLog* deps_log,
-                 DiskInterface* disk_interface)
+                 DiskInterface* disk_interface, FileMonitor* file_monitor)
       : build_log_(build_log),
         disk_interface_(disk_interface),
-        dep_loader_(state, deps_log, disk_interface) {}
+        dep_loader_(state, deps_log, disk_interface, file_monitor) {}
 
   /// Examine inputs, outputs, and command lines to judge whether an edge
   /// needs to be re-run, and update outputs_ready_ and each outputs' |dirty_|

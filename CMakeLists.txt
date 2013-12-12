@@ -15,6 +15,7 @@ set(SOURCE
   src/disk_interface.cc
   src/edit_distance.cc
   src/eval_env.cc
+  src/file_monitor.cc
   src/graph.cc
   src/graphviz.cc
   src/lexer.cc
