@@ -40,6 +40,7 @@
 #include "graphviz.h"
 #include "manifest_parser.h"
 #include "file_monitor.h"
+#include "comms.h"
 #include "metrics.h"
 #include "state.h"
 #include "util.h"
@@ -78,7 +79,8 @@ struct Options {
 /// to poke into these, so store them as fields on an object.
 struct NinjaMain {
   NinjaMain(const char* ninja_command, const BuildConfig& config) :
-      ninja_command_(ninja_command), config_(config), file_monitor_(&state_) {}
+      ninja_command_(ninja_command), config_(config), file_monitor_(&state_),
+      comms_("/tmp/ninja-extended") {}
 
   /// Command line used to run Ninja.
   const char* ninja_command_;
@@ -99,6 +101,8 @@ struct NinjaMain {
   DepsLog deps_log_;
 
   FileMonitor file_monitor_;
+
+  Comms comms_;
 
   /// The type of functions that are the entry points to tools (subcommands).
   typedef int (NinjaMain::*ToolFunc)(int, char**);
