@@ -30,6 +30,9 @@
 #include <signal.h>
 #endif
 
+#include <boost/bind.hpp>
+
+#include "processor.h"
 #include "build.h"
 #include "build_log.h"
 #include "deps_log.h"
@@ -78,9 +81,18 @@ struct Options {
 /// The Ninja main() loads up a series of data structures; various tools need
 /// to poke into these, so store them as fields on an object.
 struct NinjaMain {
-  NinjaMain(const char* ninja_command, const BuildConfig& config) :
-      ninja_command_(ninja_command), config_(config), file_monitor_(&state_),
-      comms_("/tmp/ninja-extended") {}
+  NinjaMain(const char* ninja_command, const BuildConfig& config)
+    : ninja_command_(ninja_command), config_(config), file_monitor_(&state_)
+    , comms_("/tmp/ninja-extended") {
+
+      // Hook up the build command to its handler.
+      comms_.SetOnBuildCmdFn(
+        processor_.BindPost(boost::bind(&NinjaMain::TriggerBuild, this)));
+  }
+
+  /// Main processor.
+  /// TODO: the processor does not run yet. The main loop should go through it.
+  Processor processor_;
 
   /// Command line used to run Ninja.
   const char* ninja_command_;
@@ -150,6 +162,9 @@ struct NinjaMain {
 
   /// Dump the output requested by '-d stats'.
   void DumpMetrics();
+
+  /// Called when a client has required a build.
+  void TriggerBuild();
 };
 
 /// Subtools, accessible via "-t foo".
@@ -858,6 +873,10 @@ bool NinjaMain::EnsureBuildDirExists() {
     }
   }
   return true;
+}
+
+void NinjaMain::TriggerBuild() {
+  printf("Client triggers a build\n");
 }
 
 int NinjaMain::RunBuild(int argc, char** argv) {

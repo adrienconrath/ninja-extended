@@ -31,6 +31,7 @@ struct Processor : public IProcessor {
   virtual void Post(const ActionFn& fn);
   virtual void Dispatch(const ActionFn& fn);
   virtual io_service& Service();
+  virtual const ActionFn BindPost(const ActionFn& fn);
 
 private:
   boost::asio::io_service io_service_;

@@ -28,6 +28,7 @@ struct IProcessor {
   virtual void Post(const ActionFn&) = 0;
   virtual void Dispatch(const ActionFn&) = 0;
   virtual io_service& Service() = 0;
+  virtual const ActionFn BindPost(const ActionFn& fn) = 0;
 
   virtual ~IProcessor() {}
 };

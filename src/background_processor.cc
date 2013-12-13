@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <boost/bind.hpp>
+
 #include "background_processor.h"
 
 BackgroundProcessor::BackgroundProcessor()
@@ -54,4 +56,8 @@ void BackgroundProcessor::Post(const ActionFn& fn) {
 
 void BackgroundProcessor::Dispatch(const ActionFn& fn) {
   io_service_.dispatch(fn);
+}
+
+const ActionFn BackgroundProcessor::BindPost(const ActionFn& fn) {
+  return boost::bind(&BackgroundProcessor::Post, this, fn);
 }

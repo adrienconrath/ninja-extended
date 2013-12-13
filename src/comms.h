@@ -24,11 +24,17 @@
 using namespace std;
 using namespace boost::asio;
 
+/// TODO: the targets and options should be parameters.
+/// TODO: this could pass a handler for a callback when the build completes.
+typedef boost::function<void(void)> OnBuildCmdFn;
+
 /// Communicate with client on a unix socket.
 struct Comms {
 
   Comms(const string& socketName);
   ~Comms();
+
+  void SetOnBuildCmdFn(const OnBuildCmdFn& on_build_cmd);
 
 private:
   /// Communications take place in their own thread.
@@ -38,6 +44,9 @@ private:
   local::stream_protocol::acceptor acceptor_;
   local::stream_protocol::socket socket_;
   boost::array<char, 1024> data_;
+
+  /// Action to be taken when the client requires a build.
+  OnBuildCmdFn on_build_cmd_;
 
   void AsyncAccept();
   void OnAccept(const boost::system::error_code& err);

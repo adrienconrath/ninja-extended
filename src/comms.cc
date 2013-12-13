@@ -33,6 +33,11 @@ Comms::Comms(const string& socketName)
 Comms::~Comms() {
 }
 
+void Comms::SetOnBuildCmdFn(const OnBuildCmdFn& on_build_cmd)
+{
+  on_build_cmd_ = on_build_cmd;
+}
+
 void Comms::AsyncAccept() {
   acceptor_.async_accept(socket_,
     boost::bind(&Comms::OnAccept, this, boost::asio::placeholders::error));
@@ -69,6 +74,12 @@ void Comms::OnRead(const boost::system::error_code& err,
   }
 
   printf("%lu bytes received\n", bytes_transferred);
+
+  // Since we do not have protobuf messages for now, we just trigger a build
+  // immediately when we receive bytes from the client.
+  if (on_build_cmd_) {
+    on_build_cmd_();
+  }
 
   // Read again
   AsyncRead();

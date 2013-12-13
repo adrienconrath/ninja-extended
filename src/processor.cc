@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <boost/bind.hpp>
+
 #include "processor.h"
 
 Processor::Processor() {
@@ -42,4 +44,8 @@ void Processor::Post(const ActionFn& fn) {
 
 void Processor::Dispatch(const ActionFn& fn) {
   io_service_.dispatch(fn);
+}
+
+const ActionFn Processor::BindPost(const ActionFn& fn) {
+  return boost::bind(&Processor::Post, this, fn);
 }
