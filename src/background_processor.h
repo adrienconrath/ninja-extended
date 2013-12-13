@@ -38,6 +38,7 @@ private:
 
   boost::asio::io_service io_service_;
   boost::thread thread_;
+  bool explicit_stop_;
 };
 
 #endif  // NINJA_BACKGROUND_PROCESSOR_H_

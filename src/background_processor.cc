@@ -15,7 +15,8 @@
 #include "background_processor.h"
 
 BackgroundProcessor::BackgroundProcessor()
-  : thread_(boost::bind(&BackgroundProcessor::Run, this)) {
+  : thread_(boost::bind(&BackgroundProcessor::Run, this))
+  , explicit_stop_(false) {
 
 }
 
@@ -36,11 +37,14 @@ void BackgroundProcessor::Run() {
       // TODO: handle this error.
       printf("Error: %s\n", err.message().c_str());
     }
+    if (explicit_stop_)
+      break;
     io_service_.reset();
   }
 }
 
 void BackgroundProcessor::Stop() {
+  explicit_stop_ = true;
   io_service_.stop();
 }
 
