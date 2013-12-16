@@ -387,9 +387,7 @@ void Plan::NodeFinished(Node* node) {
     && node->in_edge()->inputs_.empty()))
   {
     // The node needs to be monitored again.
-    string err;
-    if (!file_monitor_->MonitorNode(node, &err))
-      Error("%s", err.c_str());
+    file_monitor_->MonitorNode(node);
   }
 
   // See if we we want any edges from this node.

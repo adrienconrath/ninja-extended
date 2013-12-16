@@ -27,10 +27,10 @@
 #else
 #include <getopt.h>
 #include <unistd.h>
-#include <signal.h>
 #endif
 
 #include <boost/bind.hpp>
+#include <boost/bind/protect.hpp>
 
 #include "processor.h"
 #include "build.h"
@@ -57,11 +57,6 @@ int MSVCHelperMain(int argc, char** argv);
 void CreateWin32MiniDump(_EXCEPTION_POINTERS* pep);
 #endif
 
-void sigterm_handler(int signum)
-{
-  // This causes the monitor to stop waiting
-}
-
 namespace {
 
 struct Tool;
@@ -81,17 +76,18 @@ struct Options {
 /// The Ninja main() loads up a series of data structures; various tools need
 /// to poke into these, so store them as fields on an object.
 struct NinjaMain {
-  NinjaMain(const char* ninja_command, const BuildConfig& config)
-    : ninja_command_(ninja_command), config_(config), file_monitor_(&state_)
-    , comms_("/tmp/ninja-extended") {
+  NinjaMain(const char* ninja_command, const BuildConfig& config,
+    const Options& options)
+    : ninja_command_(ninja_command), config_(config), options_(options)
+    , file_monitor_(&state_)
+    , comms_("/tmp/ninja-extended"), continue_(true) {
 
       // Hook up the build command to its handler.
       comms_.SetOnBuildCmdFn(
-        processor_.BindPost(boost::bind(&NinjaMain::TriggerBuild, this)));
+        boost::bind(&NinjaMain::TriggerBuildMoveToMainThread, this, _1));
   }
 
   /// Main processor.
-  /// TODO: the processor does not run yet. The main loop should go through it.
   Processor processor_;
 
   /// Command line used to run Ninja.
@@ -99,6 +95,8 @@ struct NinjaMain {
 
   /// Build configuration set from flags (e.g. parallelism).
   const BuildConfig& config_;
+
+  const Options& options_;
 
   /// Loaded state (rules, nodes).
   State state_;
@@ -115,6 +113,8 @@ struct NinjaMain {
   FileMonitor file_monitor_;
 
   Comms comms_;
+
+  bool continue_;
 
   /// The type of functions that are the entry points to tools (subcommands).
   typedef int (NinjaMain::*ToolFunc)(int, char**);
@@ -156,15 +156,23 @@ struct NinjaMain {
   /// @return true if the manifest was rebuilt.
   bool RebuildManifest(const char* input_file, string* err);
 
-  /// Build the targets listed on the command line.
-  /// @return an exit code.
-  int RunBuild(int argc, char** argv);
-
   /// Dump the output requested by '-d stats'.
   void DumpMetrics();
 
   /// Called when a client has required a build.
-  void TriggerBuild();
+  void TriggerBuildMoveToMainThread(const OnBuildCompletedFn& onBuildCompleted);
+  void TriggerBuild(const OnBuildCompletedFn& onBuildCompleted);
+
+  void BuildDirtySetMoveToMainThread(const OnBuildCompletedFn& onBuildCompleted,
+    const boost::shared_ptr<vector<Node*>>& changed_files);
+  bool BuildDirtySet(const OnBuildCompletedFn& onBuildCompleted,
+    const boost::shared_ptr<vector<Node*>>& changed_files);
+  /// Mark a node and its dependants dirty.
+  bool MarkNodeDirty(Node* node, string* err);
+
+  bool RunBuild(const OnBuildCompletedFn& onBuildCompleted);
+
+  void Run();
 };
 
 /// Subtools, accessible via "-t foo".
@@ -875,46 +883,121 @@ bool NinjaMain::EnsureBuildDirExists() {
   return true;
 }
 
-void NinjaMain::TriggerBuild() {
-  printf("Client triggers a build\n");
+void NinjaMain::TriggerBuildMoveToMainThread(
+  const OnBuildCompletedFn& onBuildCompleted) {
+  processor_.Post(boost::bind(&NinjaMain::TriggerBuild, this, onBuildCompleted));
 }
 
-int NinjaMain::RunBuild(int argc, char** argv) {
-  string err;
-  vector<Node*> targets;
-  if (!CollectTargetsFromArgs(argc, argv, &targets, &err)) {
-    Error("%s", err.c_str());
-    return 1;
+void NinjaMain::TriggerBuild(const OnBuildCompletedFn& onBuildCompleted) {
+  printf("Client triggers a build\n");
+  // Flush the file monitor so that we know what to rebuild.
+  file_monitor_.Flush(boost::bind(
+    &NinjaMain::BuildDirtySetMoveToMainThread, this, onBuildCompleted, _1));
+}
+
+void NinjaMain::BuildDirtySetMoveToMainThread(const OnBuildCompletedFn& onBuildCompleted,
+  const boost::shared_ptr<vector<Node*>>& changed_files) {
+  processor_.Post(boost::bind(
+    &NinjaMain::BuildDirtySet, this, onBuildCompleted, changed_files));
+}
+
+bool NinjaMain::BuildDirtySet(const OnBuildCompletedFn& onBuildCompleted,
+  const boost::shared_ptr<vector<Node*>>& changed_files) {
+  for (vector<Node*>::iterator it = changed_files->begin();
+       it != changed_files->end(); ++it)
+  {
+    string err;
+    if (!MarkNodeDirty(*it, &err))
+      Error("Error while marking node dirty: %s", (*it)->path().c_str());
   }
+
+  string err;
+  if (RebuildManifest(options_.input_file, &err)) {
+    // Not handled yet.
+    Error("Manifest has changed, this is not implemented yet.");
+    return false;
+  } else if (!err.empty()) {
+    Error("rebuilding '%s': %s", options_.input_file, err.c_str());
+    return false;
+  }
+
+  bool res = RunBuild(onBuildCompleted);
+  if (g_metrics)
+    DumpMetrics(); /// TODO: metrics should be reset after a build.
+
+  return res;
+}
+
+bool NinjaMain::MarkNodeDirty(Node* node, string* err)
+{
+  node->MarkDirty();
+  if (Edge* in_edge = node->in_edge())
+  {
+    if (!in_edge->outputs_ready_)
+      return true;
+    in_edge->outputs_ready_ = false;
+  }
+
+  /// Only exploring output edges that are not an order only dependency.
+  const vector<Edge*>& out_edges = node->not_order_only_out_edges();
+  for (vector<Edge*>::const_iterator e = out_edges.begin();
+       e != out_edges.end() && *e != NULL; ++e) {
+    Edge* edge = *e;
+
+    for (unsigned int i = 0; i < edge->outputs_.size(); ++i)
+    {
+      if (!MarkNodeDirty(edge->outputs_[i], err))
+	return false;
+    }
+  }
+
+  return true;
+}
+
+void NinjaMain::Run() {
+  while (continue_) {
+    processor_.RunOne();
+  }
+}
+
+bool NinjaMain::RunBuild(const OnBuildCompletedFn& onBuildCompleted) {
+  Node* node = state_.LookupNode("all");
+  assert(node);
 
   Builder builder(&state_, config_, &build_log_, &deps_log_, &disk_interface_,
     &file_monitor_);
-  for (size_t i = 0; i < targets.size(); ++i) {
-    if (!builder.AddTarget(targets[i], &err)) {
-      if (!err.empty()) {
-        Error("%s", err.c_str());
-        return 1;
-      } else {
-        // Added a target that is already up-to-date; not really
-        // an error.
-      }
+
+  std::string err;
+  if (!builder.AddTarget(node, &err)) {
+    if (!err.empty()) {
+      Error("%s", err.c_str());
+      return false;
+    } else {
+      // Added a target that is already up-to-date; not really
+      // an error.
     }
   }
 
   if (builder.AlreadyUpToDate()) {
     printf("ninja: no work to do.\n");
-    return 0;
+    onBuildCompleted();
+    return true;
   }
 
   if (!builder.Build(&err)) {
     printf("ninja: build stopped: %s.\n", err.c_str());
     if (err.find("interrupted by user") != string::npos) {
-      return 2;
+      onBuildCompleted();
+      return false;
     }
-    return 1;
+    else {
+      onBuildCompleted();
+      return false;
+    }
   }
 
-  return 0;
+  onBuildCompleted();
+  return true;
 }
 
 #ifdef _MSC_VER
@@ -1037,7 +1120,7 @@ int real_main(int argc, char** argv) {
   if (options.tool && options.tool->when == Tool::RUN_AFTER_FLAGS) {
     // None of the RUN_AFTER_FLAGS actually use a NinjaMain, but it's needed
     // by other tools.
-    NinjaMain ninja(ninja_command, config);
+    NinjaMain ninja(ninja_command, config, options);
     return (ninja.*options.tool->func)(argc, argv);
   }
 
@@ -1054,7 +1137,7 @@ int real_main(int argc, char** argv) {
     }
   }
 
-  NinjaMain ninja(ninja_command, config);
+  NinjaMain ninja(ninja_command, config, options);
 
   RealFileReader file_reader;
   ManifestParser parser(&ninja.state_, &file_reader);
@@ -1076,41 +1159,18 @@ int real_main(int argc, char** argv) {
   if (options.tool && options.tool->when == Tool::RUN_AFTER_LOGS)
     return (ninja.*options.tool->func)(argc, argv);
 
-  if (!ninja.file_monitor_.Load(&err)) {
+  if (!ninja.file_monitor_.Start(&err)) {
     Error("%s", err.c_str());
     return 1;
   }
 
-  while (true) {
+  // Will run indefinitely until the daemon is asked to stop.
+  ninja.Run();
 
-    if (!ninja.file_monitor_.Wait()) {
-      Error("%s", "Error while waiting for file events");
-      return 1;
-    }
-
-    if (ninja.RebuildManifest(options.input_file, &err)) {
-      // Not handled yet.
-      Error("Manifest has changed, this is not implemented yet.");
-      return 3;
-    } else if (!err.empty()) {
-      Error("rebuilding '%s': %s", options.input_file, err.c_str());
-      return 1;
-    }
-
-    int result = ninja.RunBuild(argc, argv);
-    if (g_metrics)
-      ninja.DumpMetrics();
-
-    if (result != 0)
-      Error("Error while running build");
-    else
-      printf("Done building.\n");
-  }
-
-  return 1;  // Shouldn't be reached.
+  return 0;
 }
 
-}  // anonymous namespace
+} // Anonymous namespace
 
 int main(int argc, char** argv) {
 #if !defined(NINJA_BOOTSTRAP) && defined(_MSC_VER)
@@ -1128,7 +1188,6 @@ int main(int argc, char** argv) {
     return 2;
   }
 #else
-  signal(SIGINT, sigterm_handler);
   return real_main(argc, argv);
 #endif
 }

@@ -16,7 +16,7 @@
 
 #include "processor.h"
 
-Processor::Processor() {
+Processor::Processor() : work_(io_service_) {
 
 }
 
@@ -36,6 +36,19 @@ void Processor::Stop() {
 /// Will block.
 void Processor::Run() {
   io_service_.run();
+}
+
+/// Will block.
+void Processor::RunOne() {
+  boost::system::error_code err;
+  io_service_.run_one(err);
+  if (err) {
+    // TODO: handle this error.
+    printf("Error: %s\n", err.message().c_str());
+  }
+  else {
+    io_service_.reset();
+  }
 }
 
 void Processor::Post(const ActionFn& fn) {

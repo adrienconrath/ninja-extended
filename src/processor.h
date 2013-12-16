@@ -28,6 +28,7 @@ struct Processor : public IProcessor {
 
   virtual void Stop();
   virtual void Run();
+  virtual void RunOne();
   virtual void Post(const ActionFn& fn);
   virtual void Dispatch(const ActionFn& fn);
   virtual io_service& Service();
@@ -35,6 +36,7 @@ struct Processor : public IProcessor {
 
 private:
   boost::asio::io_service io_service_;
+  boost::asio::io_service::work work_;
 };
 
 #endif  // NINJA_PROCESSOR_H_

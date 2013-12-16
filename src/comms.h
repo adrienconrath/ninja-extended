@@ -24,9 +24,10 @@
 using namespace std;
 using namespace boost::asio;
 
+/// TODO: add result parameters.
+typedef boost::function<void(void)> OnBuildCompletedFn;
 /// TODO: the targets and options should be parameters.
-/// TODO: this could pass a handler for a callback when the build completes.
-typedef boost::function<void(void)> OnBuildCmdFn;
+typedef boost::function<void(const OnBuildCompletedFn&)> OnBuildCmdFn;
 
 /// Communicate with client on a unix socket.
 struct Comms {
@@ -52,6 +53,8 @@ private:
   void OnAccept(const boost::system::error_code& err);
   void AsyncRead();
   void OnRead(const boost::system::error_code& err, size_t bytes_transferred);
+
+  void OnBuildCompleted();
 };
 
 #endif  // NINJA_COMMS_H_

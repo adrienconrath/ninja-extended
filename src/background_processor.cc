@@ -17,7 +17,8 @@
 #include "background_processor.h"
 
 BackgroundProcessor::BackgroundProcessor()
-  : thread_(boost::bind(&BackgroundProcessor::Run, this))
+  : work_(io_service_)
+  , thread_(boost::bind(&BackgroundProcessor::Run, this))
   , explicit_stop_(false) {
 
 }

@@ -29,15 +29,15 @@
 #include "graph.h"
 #include "state.h"
 #include "util.h"
-#define EVENT_SIZE  (sizeof (struct inotify_event))
-#define EVENT_BUF_LEN (1024 * (EVENT_SIZE + 16))
 
 FileMonitor::FileMonitor(State* state)
-  : state_(state) {
+  : state_(state), stream_(processor_.Service())
+  , changed_files_(new vector<Node*>) {
     inotify_fd_ = inotify_init();
+    stream_.assign(inotify_fd_);
 }
 
-bool FileMonitor::Load(string* err) {
+bool FileMonitor::Start(string* err) {
   if (inotify_fd_ < 0){
     *err = "Cannot initialize inotify";
     return false;
@@ -51,6 +51,8 @@ bool FileMonitor::Load(string* err) {
     if (!LoadSubTarget(*i, err))
       return false;
   }
+
+  AsyncRead();
 
   return true;
 }
@@ -99,44 +101,29 @@ bool FileMonitor::AddNode(Node* node, string* err) {
   return true;
 }
 
-bool FileMonitor::Wait()
-{
-  size_t r;
-  char buffer[EVENT_BUF_LEN];
-  struct inotify_event* event;
+void FileMonitor::AsyncRead() {
+  stream_.async_read_some(boost::asio::buffer(buffer_),
+    boost::bind(&FileMonitor::HandleRead, this,
+    boost::asio::placeholders::error,
+    boost::asio::placeholders::bytes_transferred));
+}
 
-  while (1) {
-    FD_ZERO(&inotify_fds_);
-    FD_SET(inotify_fd_, &inotify_fds_);
-
-    int ret = select(inotify_fd_ + 1, &inotify_fds_, NULL, NULL, 0);
-    if (ret == 0)
-      continue;
-    if (ret < 0)
-    {
-      if (errno == EINTR)
-	return true; // Not an error, we've been asked to stop.
-      return false;
-    }
-
-    r = read(inotify_fd_, buffer, EVENT_BUF_LEN);
-    if (r <= 0) {
-      perror("read");
-      return false;
-    }
-
-    unsigned int i = 0;
-    while (i < r) {
-      event = (struct inotify_event*) &buffer[i];
-      HandleEvent(event);
-      i += EVENT_SIZE + event->len;
-    }
-
-    event = (struct inotify_event *) buffer;
-    HandleEvent(event);
+void FileMonitor::HandleRead(boost::system::error_code err,
+  std::size_t bytes_transferred) {
+  if (err) {
+    Error("%s", err.message().c_str());
+    return;
   }
 
-  return true;
+  struct inotify_event* event;
+  unsigned int i = 0;
+  while (i < bytes_transferred) {
+    event = (struct inotify_event*) &buffer_[i];
+    HandleEvent(event);
+    i += EVENT_SIZE + event->len;
+  }
+
+  AsyncRead();
 }
 
 bool FileMonitor::HandleEvent(struct inotify_event* event)
@@ -181,10 +168,6 @@ bool FileMonitor::HandleEvent(struct inotify_event* event)
   return true;
 }
 
-/// TODO: When we move the FileMonitor to its own thread, it should have
-/// its own queue of file events and it should process them only before
-/// the next build. This will prevents many jumps to the main thread so that
-/// everything is done in one jump.
 bool FileMonitor::MarkNodeDirty(Node* node, int wd, string* err)
 {
   if (0 != inotify_rm_watch(inotify_fd_, wd))
@@ -197,38 +180,12 @@ bool FileMonitor::MarkNodeDirty(Node* node, int wd, string* err)
   map_nodes_.erase(node);
   node->set_monitored(false);
 
-  return MarkOutputDirty(node, err);
-}
-
-bool FileMonitor::MarkOutputDirty(Node* node, string* err)
-{
-  if (node->dirty())
-    return true;
-
-  node->MarkDirty();
-  if (Edge* in_edge = node->in_edge())
-  {
-    in_edge->outputs_ready_ = false;
-  }
-
-  /// Only exploring output edges that are not an order only dependency.
-  const vector<Edge*>& out_edges = node->not_order_only_out_edges();
-  for (vector<Edge*>::const_iterator e = out_edges.begin();
-       e != out_edges.end() && *e != NULL; ++e) {
-    Edge* edge = *e;
-
-    for (unsigned int i = 0; i < edge->outputs_.size(); ++i)
-    {
-      if (!MarkOutputDirty(edge->outputs_[i], err))
-	return false;
-    }
-  }
+  changed_files_->push_back(node);
 
   return true;
 }
 
-bool FileMonitor::MonitorNode(Node* node, string* err)
-{
+void FileMonitor::MonitorNodeBgThread(Node* node) {
   // This should be a leaf node.
   assert(!node->in_edge() || (node->in_edge()->is_phony()
     && node->in_edge()->inputs_.empty()));
@@ -236,5 +193,22 @@ bool FileMonitor::MonitorNode(Node* node, string* err)
 
   node->MarkMonitored();
 
-  return AddNode(node, err);
+  string err;
+  AddNode(node, &err);
+}
+
+/// Called from the main thread.
+void FileMonitor::MonitorNode(Node* node) {
+  processor_.Post(boost::bind(&FileMonitor::MonitorNodeBgThread, this, node));
+}
+
+void FileMonitor::FlushBgThread(const OnFlushCompletedFn& onCompleted) {
+  onCompleted(changed_files_);
+  changed_files_.reset(new vector<Node*>);
+}
+
+/// Called from the main thread.
+void FileMonitor::Flush(const OnFlushCompletedFn& onCompleted) {
+  processor_.Post(boost::bind(&FileMonitor::FlushBgThread, this,
+    onCompleted));
 }

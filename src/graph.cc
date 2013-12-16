@@ -428,11 +428,7 @@ void ImplicitDepLoader::CreatePhonyInEdge(Node* node) {
     return;
 
   if (!node->monitored())
-  {
-    string err;
-    if (!file_monitor_->MonitorNode(node, &err))
-      Error("%s", err.c_str());
-  }
+    file_monitor_->MonitorNode(node);
 
   Edge* phony_edge = state_->AddEdge(&State::kPhonyRule);
   node->set_in_edge(phony_edge);

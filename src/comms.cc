@@ -78,9 +78,15 @@ void Comms::OnRead(const boost::system::error_code& err,
   // Since we do not have protobuf messages for now, we just trigger a build
   // immediately when we receive bytes from the client.
   if (on_build_cmd_) {
-    on_build_cmd_();
+    on_build_cmd_(
+      processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this)));
   }
 
   // Read again
   AsyncRead();
+}
+
+/// This runs on the main thread.
+void Comms::OnBuildCompleted() {
+  printf("Build completed\n");
 }

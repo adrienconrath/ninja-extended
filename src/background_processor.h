@@ -38,6 +38,7 @@ private:
   virtual void Run();
 
   boost::asio::io_service io_service_;
+  boost::asio::io_service::work work_;
   boost::thread thread_;
   bool explicit_stop_;
 };
