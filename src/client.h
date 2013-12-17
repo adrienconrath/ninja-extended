@@ -16,14 +16,45 @@
 #define NINJA_CLIENT_H_
 
 #include <string>
+#include <boost/asio.hpp>
+#include <boost/function.hpp>
+#include <boost/bind.hpp>
+#include <boost/array.hpp>
+
+#include "processor.h"
 
 using namespace std;
+using namespace boost::asio;
+
+typedef boost::function<void(bool)> OnConnectCompletedFn;
+typedef boost::function<void(bool)> OnCommandCompletedFn;
 
 struct Client {
   Client(string socket_name);
 
+  void Run();
+
+  void AsyncConnect(const OnConnectCompletedFn& onConnectCompleted);
+  bool Connect();
+
+  /// TODO: pass the command as a protobuf message
+  void AsyncSendCommand(const OnCommandCompletedFn& onCommandCompleted);
+  bool SendCommand();
+
   private:
+  bool connected_;
+  bool continue_;
+  Processor processor_;
   string socket_name_;
+  local::stream_protocol::endpoint endpoint_;
+  local::stream_protocol::socket socket_;
+
+  boost::array<char, 1> dummy_data_;
+
+  void OnConnectCompleted(const OnConnectCompletedFn& onConnectCompleted,
+      boost::system::error_code err);
+  void OnCommandCompleted(const OnCommandCompletedFn& OnCommandCompleted,
+      boost::system::error_code err, size_t bytes_transferred);
 };
 
 #endif // NINJA_CLIENT_H_

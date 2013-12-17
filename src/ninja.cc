@@ -17,6 +17,7 @@
 #endif
 
 #include "daemon.h"
+#include "client.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -50,38 +51,38 @@
 /// Print usage information.
 void Usage(const BuildConfig& config) {
   fprintf(stderr,
-"usage: ninja [options] [targets...]\n"
-"\n"
-"if targets are unspecified, builds the 'default' target (see manual).\n"
-"\n"
-"options:\n"
-"  --version  print ninja version (\"%s\")\n"
-"\n"
-"  -C DIR   change to DIR before doing anything else\n"
-"  -f FILE  specify input build file [default=build.ninja]\n"
-"\n"
-"  -j N     run N jobs in parallel [default=%d, derived from CPUs available]\n"
-"  -l N     do not start new jobs if the load average is greater than N\n"
-"  -k N     keep going until N jobs fail [default=1]\n"
-"  -n       dry run (don't run commands but act like they succeeded)\n"
-"  -v       show all command lines while building\n"
-"\n"
-"  -d MODE  enable debugging (use -d list to list modes)\n"
-"  -t TOOL  run a subtool (use -t list to list subtools)\n"
-"    terminates toplevel options; further flags are passed to the tool\n",
-          kNinjaVersion, config.parallelism);
+      "usage: ninja [options] [targets...]\n"
+      "\n"
+      "if targets are unspecified, builds the 'default' target (see manual).\n"
+      "\n"
+      "options:\n"
+      "  --version  print ninja version (\"%s\")\n"
+      "\n"
+      "  -C DIR   change to DIR before doing anything else\n"
+      "  -f FILE  specify input build file [default=build.ninja]\n"
+      "\n"
+      "  -j N     run N jobs in parallel [default=%d, derived from CPUs available]\n"
+      "  -l N     do not start new jobs if the load average is greater than N\n"
+      "  -k N     keep going until N jobs fail [default=1]\n"
+      "  -n       dry run (don't run commands but act like they succeeded)\n"
+      "  -v       show all command lines while building\n"
+      "\n"
+      "  -d MODE  enable debugging (use -d list to list modes)\n"
+      "  -t TOOL  run a subtool (use -t list to list subtools)\n"
+      "    terminates toplevel options; further flags are passed to the tool\n",
+      kNinjaVersion, config.parallelism);
 }
 
 /// Choose a default value for the -j (parallelism) flag.
 int GuessParallelism() {
   switch (int processors = GetProcessorCount()) {
-  case 0:
-  case 1:
-    return 2;
-  case 2:
-    return 3;
-  default:
-    return processors + 2;
+    case 0:
+    case 1:
+      return 2;
+    case 2:
+      return 3;
+    default:
+      return processors + 2;
   }
 }
 
@@ -114,7 +115,7 @@ const Tool* ChooseTool(const string& tool_name) {
     printf("ninja subtools:\n");
     for (const Tool* tool = &kTools[0]; tool->name; ++tool) {
       if (tool->desc)
-        printf("%10s  %s\n", tool->name, tool->desc);
+	printf("%10s  %s\n", tool->name, tool->desc);
     }
     return NULL;
   }
@@ -130,7 +131,7 @@ const Tool* ChooseTool(const string& tool_name) {
   const char* suggestion = SpellcheckStringV(tool_name, words);
   if (suggestion) {
     Fatal("unknown tool '%s', did you mean '%s'?",
-          tool_name.c_str(), suggestion);
+	tool_name.c_str(), suggestion);
   } else {
     Fatal("unknown tool '%s'", tool_name.c_str());
   }
@@ -142,10 +143,10 @@ const Tool* ChooseTool(const string& tool_name) {
 bool DebugEnable(const string& name) {
   if (name == "list") {
     printf("debugging modes:\n"
-"  stats    print operation counts/timing info\n"
-"  explain  explain what caused a command to execute\n"
-"  keeprsp  don't delete @response files on success\n"
-"multiple modes can be enabled via -d FOO -d BAR\n");
+	"  stats    print operation counts/timing info\n"
+	"  explain  explain what caused a command to execute\n"
+	"  keeprsp  don't delete @response files on success\n"
+	"multiple modes can be enabled via -d FOO -d BAR\n");
     return false;
   } else if (name == "stats") {
     g_metrics = new Metrics;
@@ -158,10 +159,10 @@ bool DebugEnable(const string& name) {
     return true;
   } else {
     const char* suggestion =
-        SpellcheckString(name.c_str(), "stats", "explain", NULL);
+      SpellcheckString(name.c_str(), "stats", "explain", NULL);
     if (suggestion) {
       Error("unknown debug setting '%s', did you mean '%s'?",
-            name.c_str(), suggestion);
+	  name.c_str(), suggestion);
     } else {
       Error("unknown debug setting '%s'", name.c_str());
     }
@@ -173,7 +174,7 @@ bool DebugEnable(const string& name) {
 /// Parse argv for command-line options.
 /// Returns an exit code, or -1 if Ninja should continue.
 int ReadFlags(int* argc, char*** argv,
-              Options* options, BuildConfig* config) {
+    Options* options, BuildConfig* config) {
   config->parallelism = GuessParallelism();
 
   enum { OPT_VERSION = 1 };
@@ -185,71 +186,93 @@ int ReadFlags(int* argc, char*** argv,
 
   int opt;
   while (!options->tool &&
-         (opt = getopt_long(*argc, *argv, "d:f:j:k:l:nt:vC:h", kLongOptions,
-                            NULL)) != -1) {
+      (opt = getopt_long(*argc, *argv, "d:f:j:k:l:nt:vC:h", kLongOptions,
+			 NULL)) != -1) {
     switch (opt) {
       case 'd':
-        if (!DebugEnable(optarg))
-          return 1;
-        break;
+	if (!DebugEnable(optarg))
+	  return 1;
+	break;
       case 'f':
-        options->input_file = optarg;
-        break;
+	options->input_file = optarg;
+	break;
       case 'j': {
-        char* end;
-        int value = strtol(optarg, &end, 10);
-        if (*end != 0 || value <= 0)
-          Fatal("invalid -j parameter");
-        config->parallelism = value;
-        break;
-      }
+		  char* end;
+		  int value = strtol(optarg, &end, 10);
+		  if (*end != 0 || value <= 0)
+		    Fatal("invalid -j parameter");
+		  config->parallelism = value;
+		  break;
+		}
       case 'k': {
-        char* end;
-        int value = strtol(optarg, &end, 10);
-        if (*end != 0)
-          Fatal("-k parameter not numeric; did you mean -k 0?");
+		  char* end;
+		  int value = strtol(optarg, &end, 10);
+		  if (*end != 0)
+		    Fatal("-k parameter not numeric; did you mean -k 0?");
 
-        // We want to go until N jobs fail, which means we should allow
-        // N failures and then stop.  For N <= 0, INT_MAX is close enough
-        // to infinite for most sane builds.
-        config->failures_allowed = value > 0 ? value : INT_MAX;
-        break;
-      }
+		  // We want to go until N jobs fail, which means we should allow
+		  // N failures and then stop.  For N <= 0, INT_MAX is close enough
+		  // to infinite for most sane builds.
+		  config->failures_allowed = value > 0 ? value : INT_MAX;
+		  break;
+		}
       case 'l': {
-        char* end;
-        double value = strtod(optarg, &end);
-        if (end == optarg)
-          Fatal("-l parameter not numeric: did you mean -l 0.0?");
-        config->max_load_average = value;
-        break;
-      }
+		  char* end;
+		  double value = strtod(optarg, &end);
+		  if (end == optarg)
+		    Fatal("-l parameter not numeric: did you mean -l 0.0?");
+		  config->max_load_average = value;
+		  break;
+		}
       case 'n':
-        config->dry_run = true;
-        break;
+		config->dry_run = true;
+		break;
       case 't':
-        options->tool = ChooseTool(optarg);
-        if (!options->tool)
-          return 0;
-        break;
+		options->tool = ChooseTool(optarg);
+		if (!options->tool)
+		  return 0;
+		break;
       case 'v':
-        config->verbosity = BuildConfig::VERBOSE;
-        break;
+		config->verbosity = BuildConfig::VERBOSE;
+		break;
       case 'C':
-        options->working_dir = optarg;
-        break;
+		options->working_dir = optarg;
+		break;
       case OPT_VERSION:
-        printf("%s\n", kNinjaVersion);
-        return 0;
+		printf("%s\n", kNinjaVersion);
+		return 0;
       case 'h':
       default:
-        Usage(*config);
-        return 1;
+		Usage(*config);
+		return 1;
     }
   }
   *argv += optind;
   *argc -= optind;
 
   return -1;
+}
+
+// Returns true if the caller is the client.
+static bool Daemonize(const char* ninja_command, const BuildConfig& config,
+    const Options& options) {
+
+  // We fork twice in order to have the daemon run in its own
+  // process group and its own session.
+  if (fork()) {
+    // The client process continues.
+    return true;
+  }
+  setsid();
+  if (fork()) {
+    return false;
+  }
+
+  Daemon daemon(ninja_command, config, options);
+
+  // Will run indefinitely until the daemon is asked to stop.
+  daemon.Run();
+  return false;
 }
 
 int real_main(int argc, char** argv) {
@@ -264,36 +287,47 @@ int real_main(int argc, char** argv) {
   if (exit_code >= 0)
     return exit_code;
 
-#if 0
-  if (options.tool && options.tool->when == Tool::RUN_AFTER_FLAGS) {
-    // None of the RUN_AFTER_FLAGS actually use a Daemon, but it's needed
-    // by other tools.
-    Daemon ninja(ninja_command, config, options);
-    return (ninja.*options.tool->func)(argc, argv);
-  }
-#endif
-
   /// TODO: we need a protobuf message to ask the daemon to change dir?
   if (options.working_dir) {
     // The formatting of this string, complete with funny quotes, is
     // so Emacs can properly identify that the cwd has changed for
     // subsequent commands.
-    // Don't print this if a tool is being used, so that tool output
-    // can be piped into a file without this string showing up.
-    if (!options.tool)
-      printf("ninja: Entering directory `%s'\n", options.working_dir);
     if (chdir(options.working_dir) < 0) {
       Fatal("chdir to '%s' - %s", options.working_dir, strerror(errno));
     }
   }
 
-  // TODO: If the daemon already exists, we should simply connect
-  // to it and run the build command. Otherwise, we should spawn the daemon.
+  Client client("/tmp/ninja-extended");
 
-  Daemon ninja(ninja_command, config, options);
+  if (!client.Connect()) {
+    // Daemon does not exist
+    printf("Creating daemon\n");
+    if (!Daemonize(ninja_command, config, options))
+      return 0;
 
-  // Will run indefinitely until the daemon is asked to stop.
-  ninja.Run();
+    // Trying to reconnect.
+    int nb_tries = 0;
+    int max_tries = 10;
+    bool connected = false;
+    do {
+      connected = client.Connect();
+      nb_tries++;
+
+      if (!connected && nb_tries != max_tries)
+	sleep(1);
+    }
+    while (!connected && nb_tries != max_tries);
+
+    if (!connected)
+    {
+      Error("Cannot connect to daemon");
+      return 1;
+    }
+  }
+
+  printf("Client connected\n");
+  client.SendCommand();
+  printf("Successfully sent command\n");
 
   return 0;
 }
