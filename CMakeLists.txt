@@ -12,9 +12,11 @@ include_directories(${Boost_INCLUDE_DIRS})
 set(SOURCE
   src/background_processor.cc
   src/build.cc
+  src/client.cc
   src/build_log.cc
   src/clean.cc
   src/comms.cc
+  src/daemon.cc
   src/debug_flags.cc
   src/depfile_parser.cc
   src/deps_log.cc
