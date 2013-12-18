@@ -17,7 +17,8 @@
 Client::Client(string socket_name)
   : connected_(false), continue_(false),
   socket_name_(socket_name), endpoint_(socket_name_),
-  socket_(processor_.Service()) {
+  socket_(processor_.Service()),
+  communicator_(socket_) {
   }
 
 void Client::Run() {
@@ -74,6 +75,17 @@ void Client::OnCommandCompleted(const OnCommandCompletedFn& onCommandCompleted,
   } 
 
   onCommandCompleted(true);
+}
+
+void Client::SendBuildRequest() {
+  NinjaMessage::BuildRequest req;
+  communicator_.SendRequest<NinjaMessage::BuildRequest, NinjaMessage::BuildResponse>(
+      req, boost::bind(&Client::OnBuildCompleted, this, _1, _2));
+}
+
+void Client::OnBuildCompleted(const RequestResult& res,
+    const NinjaMessage::BuildResponse& response) {
+  printf("Client::OnBuildCompleted\n");
 }
 
 void Client::AsyncSendCommand(const OnCommandCompletedFn& onCommandCompleted) {

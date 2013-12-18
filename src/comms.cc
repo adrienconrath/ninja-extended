@@ -20,7 +20,8 @@
 Comms::Comms(const string& socketName)
   : endpoint_(socketName)
   , acceptor_(processor_.Service())
-  , socket_(processor_.Service()) {
+  , socket_(processor_.Service())
+  , communicator_(socket_) {
   ::unlink(socketName.c_str());
   acceptor_.open(endpoint_.protocol());
   acceptor_.set_option(local::stream_protocol::acceptor::reuse_address(true));
@@ -28,6 +29,12 @@ Comms::Comms(const string& socketName)
   acceptor_.listen();
 
   AsyncAccept();
+
+  communicator_.SetRequestHandler<NinjaMessage::StopRequest>(
+      boost::bind(&Comms::OnStopRequest, this, _1, _2));
+
+  communicator_.SetRequestHandler<NinjaMessage::BuildRequest>(
+      boost::bind(&Comms::OnBuildRequest, this, _1, _2));
 }
 
 Comms::~Comms() {
@@ -75,18 +82,37 @@ void Comms::OnRead(const boost::system::error_code& err,
 
   printf("%lu bytes received\n", bytes_transferred);
 
+#if 0
   // Since we do not have protobuf messages for now, we just trigger a build
   // immediately when we receive bytes from the client.
   if (on_build_cmd_) {
     on_build_cmd_(
       processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this)));
   }
+#endif
 
   // Read again
   AsyncRead();
 }
 
 /// This runs on the main thread.
-void Comms::OnBuildCompleted() {
+void Comms::OnBuildCompleted(int request_id) {
   printf("Build completed\n");
+  NinjaMessage::BuildResponse response;
+  communicator_.SendReply(request_id, response);
+}
+
+void Comms::OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req)
+{
+  printf("OnBuildRequest\n");
+
+  if (on_build_cmd_) {
+    on_build_cmd_(
+      processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this, request_id)));
+  }
+}
+
+void Comms::OnStopRequest(int request_id, const NinjaMessage::StopRequest& req)
+{
+  printf("OnStopRequest\n");
 }

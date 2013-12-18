@@ -1,0 +1,30 @@
+package NinjaMessage;
+
+message Header {
+  required int32 size = 1;
+  required int32 type_id = 2;
+  required int32 request_id = 3;
+}
+
+message BuildRequest {
+  required int32 type_id = 1 [default = 0];
+  // TODO: add targets to be build
+}
+
+message BuildOutputStream {
+  required int32 type_id = 1 [default = 1];
+  required string data = 2;
+  // TODO: add build result
+}
+
+message BuildResponse {
+  required int32 type_id = 1 [default = 3];
+}
+
+message StopRequest {
+  required int32 type_id = 1 [default = 4];
+}
+
+message StopResponse {
+  required int32 type_id = 1 [default = 5];
+}

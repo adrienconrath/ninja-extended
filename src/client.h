@@ -21,6 +21,7 @@
 #include <boost/bind.hpp>
 #include <boost/array.hpp>
 
+#include "communicator.h"
 #include "processor.h"
 
 using namespace std;
@@ -44,10 +45,12 @@ struct Client {
   private:
   bool connected_;
   bool continue_;
+  // TODO: this should be a background processor.
   Processor processor_;
   string socket_name_;
   local::stream_protocol::endpoint endpoint_;
   local::stream_protocol::socket socket_;
+  Communicator communicator_;
 
   boost::array<char, 1> dummy_data_;
 
@@ -55,6 +58,10 @@ struct Client {
       boost::system::error_code err);
   void OnCommandCompleted(const OnCommandCompletedFn& OnCommandCompleted,
       boost::system::error_code err, size_t bytes_transferred);
+
+  void SendBuildRequest();
+  void OnBuildCompleted(const RequestResult& res,
+      const NinjaMessage::BuildResponse& response);
 };
 
 #endif // NINJA_CLIENT_H_
