@@ -10,3 +10,5 @@ Hacking the Ninja build system to add new wacky functionalities:
 
 - Targets that only depend on up-to-date versioned files are retrieved from a shared Key-Value store instead of being
   built locally.
+
+This is a WIP, nothing is working yet!
