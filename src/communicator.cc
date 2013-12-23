@@ -17,22 +17,40 @@
 Communicator::Communicator(local::stream_protocol::socket& socket,
     IProcessor& bg_processor, IProcessor& processor)
   : request_id_(0), socket_(socket), bg_processor_(bg_processor),
-  processor_(processor) {
+  processor_(processor), sending_messages_(false) {
 
     // Start listening for messages on the background thread.
     bg_processor_.Post(boost::bind(&Communicator::AsyncReceiveMessage, this));
   }
 
-// TODO: this should enqueue the message in a queue, and if the queue
-// was empty, this should call AsyncSendMessage.
 void Communicator::EnqueueMessage(int request_id, int type_id,
     boost::shared_ptr<boost::asio::streambuf>& buf_message,
     const ErrorHandler_t& completion_handler) {
-  // TODO
+
+  pending_messages_.push(PendingMessage{request_id, type_id, buf_message,
+      completion_handler});
+
+  // Restart the sending loop if needed.
+  if (!sending_messages_) {
+    SendNextMessage();
+  }
 }
 
-/// TODO: this should find the first message in the queue
-/// instead of having a message passed by parameter.
+void Communicator::SendNextMessage() {
+  if (pending_messages_.empty()) {
+    // There are no more messages to be sent.
+    sending_messages_ = false;
+    return;
+  }
+
+  sending_messages_ = true;
+
+  PendingMessage& msg = pending_messages_.front();
+  AsyncSendMessage(msg.request_id_, msg.type_id_, msg.buf_message_,
+      msg.completion_handler_);
+  pending_messages_.pop();
+}
+
 void Communicator::AsyncSendMessage(
     int request_id, int type_id,
     boost::shared_ptr<boost::asio::streambuf>& buf_message,
@@ -60,9 +78,9 @@ void Communicator::AsyncWriteHeader(
     const ErrorHandler_t& completion_handler) {
 
   async_write(socket_, *buf_header.get(), boost::bind(&Communicator::OnWriteHeader,
-	this, boost::asio::placeholders::error,
-	boost::asio::placeholders::bytes_transferred,
-	buf_header, buf_message, completion_handler));
+        this, boost::asio::placeholders::error,
+        boost::asio::placeholders::bytes_transferred,
+        buf_header, buf_message, completion_handler));
 }
 
 void Communicator::OnWriteHeader(
@@ -85,9 +103,9 @@ void Communicator::AsyncWriteMessage(
     const ErrorHandler_t& completion_handler) {
 
   async_write(socket_, *buf_message.get(), boost::bind(&Communicator::OnWriteMessage,
-	this, boost::asio::placeholders::error,
-	boost::asio::placeholders::bytes_transferred,
-	buf_message, completion_handler));
+        this, boost::asio::placeholders::error,
+        boost::asio::placeholders::bytes_transferred,
+        buf_message, completion_handler));
 }
 
 void Communicator::OnWriteMessage(
@@ -103,8 +121,7 @@ void Communicator::OnWriteMessage(
 
   completion_handler(RequestResult::SUCCESS);
 
-  // TODO: this should check if there is a new message to be sent
-  // in the queue.
+  SendNextMessage();
 }
 
 void Communicator::AsyncReceiveMessage() {
@@ -113,7 +130,7 @@ void Communicator::AsyncReceiveMessage() {
 
   async_read(socket_, boost::asio::buffer(*buf_header.get(), size),
       boost::bind(&Communicator::OnReadHeader, this, boost::asio::placeholders::error,
-	boost::asio::placeholders::bytes_transferred, buf_header));
+        boost::asio::placeholders::bytes_transferred, buf_header));
 }
 
 void Communicator::OnReadHeader(const boost::system::error_code& err,
@@ -137,7 +154,7 @@ void Communicator::OnReadHeader(const boost::system::error_code& err,
 
   async_read(socket_, boost::asio::buffer(*buf_message.get(), header->size()),
       boost::bind(&Communicator::OnReadMessage, this, boost::asio::placeholders::error,
-	boost::asio::placeholders::bytes_transferred, header, buf_message));
+        boost::asio::placeholders::bytes_transferred, header, buf_message));
 }
 
 void Communicator::OnReadMessage(const boost::system::error_code& err,

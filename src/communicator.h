@@ -20,6 +20,7 @@
 #include <map>
 #include <istream>
 #include <ostream>
+#include <queue>
 
 #include "messages.pb.h"
 #include "iprocessor.h"
@@ -47,7 +48,10 @@ struct Communicator {
         const std::string& buf)> MessageHandler_t;
 
     struct PendingMessage {
-      // TODO
+      int request_id_;
+      int type_id_;
+      boost::shared_ptr<boost::asio::streambuf> buf_message_;
+      const ErrorHandler_t completion_handler_;
     };
 
   public:
@@ -98,6 +102,9 @@ struct Communicator {
     local::stream_protocol::socket& socket_;
     IProcessor& bg_processor_;
     IProcessor& processor_;
+    /// Messages that are waiting to be sent.
+    queue<PendingMessage> pending_messages_;
+    bool sending_messages_;
 
     /// Map a message type_id to a handler.
     /// This keeps track of all types of request messages the user can respond
@@ -157,7 +164,7 @@ struct Communicator {
           return;
         }
 
-        AsyncSendMessage(request_id_, TRequest::default_instance().type_id(),
+        EnqueueMessage(request_id_, TRequest::default_instance().type_id(),
             buf, completion_handler);
       }
 
@@ -176,7 +183,7 @@ struct Communicator {
           return;
         }
 
-        AsyncSendMessage(request_id, TResponse::default_instance().type_id(),
+        EnqueueMessage(request_id, TResponse::default_instance().type_id(),
             buf, completion_handler);
       }
 
@@ -292,6 +299,8 @@ struct Communicator {
     void EnqueueMessage(int request_id, int type_id,
         boost::shared_ptr<boost::asio::streambuf>& buf_message,
         const ErrorHandler_t& completion_handler);
+
+    void SendNextMessage();
 
     void AsyncSendMessage(int request_id, int type_id,
         boost::shared_ptr<boost::asio::streambuf>& buf_message,
