@@ -18,6 +18,7 @@
 #include <string>
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
+#include <memory>
 
 #include "communicator.h"
 #include "background_processor.h"
@@ -40,12 +41,12 @@ struct Comms {
 
   private:
   /// Communications take place in their own thread.
-  BackgroundProcessor processor_;
+  BackgroundProcessor bg_processor_;
 
   local::stream_protocol::endpoint endpoint_;
   local::stream_protocol::acceptor acceptor_;
   local::stream_protocol::socket socket_;
-  Communicator communicator_;
+  std::unique_ptr<Communicator> communicator_;
   boost::array<char, 1024> data_;
 
   /// Action to be taken when the client requires a build.
@@ -53,8 +54,6 @@ struct Comms {
 
   void AsyncAccept();
   void OnAccept(const boost::system::error_code& err);
-  void AsyncRead();
-  void OnRead(const boost::system::error_code& err, size_t bytes_transferred);
 
   void OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req);
   void OnStopRequest(int request_id, const NinjaMessage::StopRequest& req);

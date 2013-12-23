@@ -19,6 +19,15 @@ Communicator::Communicator(local::stream_protocol::socket& socket,
   : request_id_(0), socket_(socket), bg_processor_(bg_processor),
   processor_(processor), sending_messages_(false) {
 
+    // Create a dummy header and calculate its size.
+    // XXX: is there a way to compute the size of a Header
+    // without creating a dummy object?
+    NinjaMessage::Header dummy_header;
+    dummy_header.set_size(0);
+    dummy_header.set_type_id(0);
+    dummy_header.set_request_id(0);
+    header_size_ = dummy_header.ByteSize();
+
     // Start listening for messages on the background thread.
     bg_processor_.Post(boost::bind(&Communicator::AsyncReceiveMessage, this));
   }
@@ -89,7 +98,7 @@ void Communicator::OnWriteHeader(
     boost::shared_ptr<boost::asio::streambuf> buf_message,
     const ErrorHandler_t& completion_handler) {
   if (err) {
-    printf("Error while sending header\n");
+    printf("Error while sending header: %s\n", err.message().c_str());
     completion_handler(RequestResult::NETWORK_ERROR);
     // TODO: close socket?
     return;
@@ -125,10 +134,10 @@ void Communicator::OnWriteMessage(
 }
 
 void Communicator::AsyncReceiveMessage() {
-  int size = NinjaMessage::Header::default_instance().ByteSize();
-  boost::shared_ptr<std::vector<char>> buf_header(new std::vector<char>());
+  boost::shared_ptr<std::vector<char>> buf_header(
+      new std::vector<char>(header_size_));
 
-  async_read(socket_, boost::asio::buffer(*buf_header.get(), size),
+  async_read(socket_, boost::asio::buffer(*buf_header.get(), header_size_),
       boost::bind(&Communicator::OnReadHeader, this, boost::asio::placeholders::error,
         boost::asio::placeholders::bytes_transferred, buf_header));
 }
@@ -150,7 +159,8 @@ void Communicator::OnReadHeader(const boost::system::error_code& err,
     return;
   }
 
-  boost::shared_ptr<std::vector<char>> buf_message(new std::vector<char>());
+  boost::shared_ptr<std::vector<char>> buf_message(
+      new std::vector<char>(header->size()));
 
   async_read(socket_, boost::asio::buffer(*buf_message.get(), header->size()),
       boost::bind(&Communicator::OnReadMessage, this, boost::asio::placeholders::error,

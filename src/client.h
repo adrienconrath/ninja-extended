@@ -20,6 +20,7 @@
 #include <boost/function.hpp>
 #include <boost/bind.hpp>
 #include <boost/array.hpp>
+#include <memory>
 
 #include "communicator.h"
 #include "processor.h"
@@ -28,42 +29,38 @@
 using namespace std;
 using namespace boost::asio;
 
-typedef boost::function<void(bool)> OnConnectCompletedFn;
-typedef boost::function<void(bool)> OnCommandCompletedFn;
-
 struct Client {
-  Client(string socket_name);
+  private:
 
-  void Run();
+    typedef boost::function<void(bool)> OnConnectCompletedFn;
+    typedef boost::function<void(const RequestResult&,
+        const NinjaMessage::BuildResponse&)> OnBuildCompletedFn;
 
-  void AsyncConnect(const OnConnectCompletedFn& onConnectCompleted);
-  bool Connect();
+  public:
 
-  /// TODO: pass the command as a protobuf message
-  void AsyncSendCommand(const OnCommandCompletedFn& onCommandCompleted);
-  bool SendCommand();
+    Client(string socket_name);
+
+    void Run();
+
+    void AsyncConnect(const OnConnectCompletedFn& onConnectCompleted);
+    bool Connect();
+
+    void AsyncBuild(const OnBuildCompletedFn& onBuildCompleted);
+    void Build();
 
   private:
-  bool connected_;
-  bool continue_;
-  // TODO: this should be a background processor.
-  Processor processor_;
-  BackgroundProcessor bg_processor_;
-  string socket_name_;
-  local::stream_protocol::endpoint endpoint_;
-  local::stream_protocol::socket socket_;
-  Communicator communicator_;
+    bool connected_;
+    bool continue_;
+    // TODO: this should be a background processor.
+    Processor processor_;
+    BackgroundProcessor bg_processor_;
+    string socket_name_;
+    local::stream_protocol::endpoint endpoint_;
+    local::stream_protocol::socket socket_;
+    std::unique_ptr<Communicator> communicator_;
 
-  boost::array<char, 1> dummy_data_;
-
-  void OnConnectCompleted(const OnConnectCompletedFn& onConnectCompleted,
-      boost::system::error_code err);
-  void OnCommandCompleted(const OnCommandCompletedFn& OnCommandCompleted,
-      boost::system::error_code err, size_t bytes_transferred);
-
-  void SendBuildRequest();
-  void OnBuildCompleted(const RequestResult& res,
-      const NinjaMessage::BuildResponse& response);
+    void OnConnectCompleted(const OnConnectCompletedFn& onConnectCompleted,
+        boost::system::error_code err);
 };
 
 #endif // NINJA_CLIENT_H_

@@ -17,8 +17,7 @@
 Client::Client(string socket_name)
   : connected_(false), continue_(false),
   socket_name_(socket_name), endpoint_(socket_name_),
-  socket_(processor_.Service()),
-  communicator_(socket_, bg_processor_, processor_) {
+  socket_(bg_processor_.Service()) {
   }
 
 void Client::Run() {
@@ -31,13 +30,16 @@ void Client::OnConnectCompleted(const OnConnectCompletedFn& onConnectCompleted,
     boost::system::error_code err) {
   if (err)
   {
-    printf("Error: %s\n", err.message().c_str());
-    onConnectCompleted(false);
+    // TODO: pass error code.
+    processor_.Post(boost::bind(onConnectCompleted, false));
     return;
-  } 
+  }
+
+  // Create the communicator
+  communicator_.reset(new Communicator(socket_, bg_processor_, processor_));
 
   connected_ = true;
-  onConnectCompleted(true);
+  processor_.Post(boost::bind(onConnectCompleted, true));
 }
 
 void Client::AsyncConnect(const OnConnectCompletedFn& onConnectCompleted) {
@@ -65,49 +67,24 @@ bool Client::Connect() {
   return success;
 }
 
-void Client::OnCommandCompleted(const OnCommandCompletedFn& onCommandCompleted,
-    boost::system::error_code err, size_t bytes_transferred) {
-  if (err)
-  {
-    printf("Error: %s\n", err.message().c_str());
-    onCommandCompleted(false);
-    return;
-  }
-
-  onCommandCompleted(true);
-}
-
-void Client::SendBuildRequest() {
+void Client::AsyncBuild(const OnBuildCompletedFn& onBuildCompleted) {
   NinjaMessage::BuildRequest req;
-  communicator_.SendRequest<NinjaMessage::BuildRequest, NinjaMessage::BuildResponse>(
-      req, boost::bind(&Client::OnBuildCompleted, this, _1, _2));
+  communicator_->SendRequest<NinjaMessage::BuildRequest, NinjaMessage::BuildResponse>(
+      req, onBuildCompleted);
 }
 
-void Client::OnBuildCompleted(const RequestResult& res,
-    const NinjaMessage::BuildResponse& response) {
-  printf("Client::OnBuildCompleted\n");
-}
-
-void Client::AsyncSendCommand(const OnCommandCompletedFn& onCommandCompleted) {
-  assert(connected_);
-  async_write(socket_, buffer(dummy_data_), boost::bind(&Client::OnCommandCompleted,
-        this, onCommandCompleted, boost::asio::placeholders::error,
-        boost::asio::placeholders::bytes_transferred));
-}
-
-bool Client::SendCommand() {
-  bool success = false;
+void Client::Build() {
   bool completed = false;
 
-  OnCommandCompletedFn fn = [&success, &completed](bool res) {
-    success = res;
+  OnBuildCompletedFn fn = [&completed](const RequestResult& res,
+    const NinjaMessage::BuildResponse& response) {
     completed = true;
+    // Ignore the response for now.
   };
 
-  AsyncSendCommand(fn);
+  AsyncBuild(fn);
   while (!completed) {
     processor_.RunOne();
   }
-
-  return success;
 }
+

@@ -19,9 +19,8 @@
 
 Comms::Comms(const string& socketName)
   : endpoint_(socketName)
-  , acceptor_(processor_.Service())
-  , socket_(processor_.Service())
-  , communicator_(socket_, processor_, processor_) {
+  , acceptor_(bg_processor_.Service())
+  , socket_(bg_processor_.Service()) {
   ::unlink(socketName.c_str());
   acceptor_.open(endpoint_.protocol());
   acceptor_.set_option(local::stream_protocol::acceptor::reuse_address(true));
@@ -29,12 +28,6 @@ Comms::Comms(const string& socketName)
   acceptor_.listen();
 
   AsyncAccept();
-
-  communicator_.SetRequestHandler<NinjaMessage::StopRequest>(
-      boost::bind(&Comms::OnStopRequest, this, _1, _2));
-
-  communicator_.SetRequestHandler<NinjaMessage::BuildRequest>(
-      boost::bind(&Comms::OnBuildRequest, this, _1, _2));
 }
 
 Comms::~Comms() {
@@ -59,47 +52,23 @@ void Comms::OnAccept(const boost::system::error_code& err) {
     return;
   }
 
-  AsyncRead();
-}
+  // Create the communicator
+  communicator_.reset(new Communicator(socket_, bg_processor_, bg_processor_));
 
-void Comms::AsyncRead() {
-  socket_.async_read_some(boost::asio::buffer(data_),
-    boost::bind(&Comms::OnRead, this, boost::asio::placeholders::error,
-      boost::asio::placeholders::bytes_transferred));
-}
+  // Set the handlers
+  communicator_->SetRequestHandler<NinjaMessage::StopRequest>(
+      boost::bind(&Comms::OnStopRequest, this, _1, _2));
+  communicator_->SetRequestHandler<NinjaMessage::BuildRequest>(
+      boost::bind(&Comms::OnBuildRequest, this, _1, _2));
 
-void Comms::OnRead(const boost::system::error_code& err,
-  size_t bytes_transferred) {
-
-  if (err) {
-    printf("Client disconnected\n");
-    socket_.close();
-
-    // Wait for client again.
-    AsyncAccept();
-    return;
-  }
-
-  printf("%lu bytes received\n", bytes_transferred);
-
-#if 0
-  // Since we do not have protobuf messages for now, we just trigger a build
-  // immediately when we receive bytes from the client.
-  if (on_build_cmd_) {
-    on_build_cmd_(
-      processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this)));
-  }
-#endif
-
-  // Read again
-  AsyncRead();
+  // TODO: set handler so that the communicator can inform we are disconnected.
 }
 
 /// This runs on the main thread.
 void Comms::OnBuildCompleted(int request_id) {
   printf("Build completed\n");
   NinjaMessage::BuildResponse response;
-  communicator_.SendReply(request_id, response);
+  communicator_->SendReply(request_id, response);
 }
 
 void Comms::OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req)
@@ -108,11 +77,13 @@ void Comms::OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req
 
   if (on_build_cmd_) {
     on_build_cmd_(
-      processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this, request_id)));
+      bg_processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this, request_id)));
   }
 }
 
 void Comms::OnStopRequest(int request_id, const NinjaMessage::StopRequest& req)
 {
   printf("OnStopRequest\n");
+
+  // TODO: stop the daemon.
 }

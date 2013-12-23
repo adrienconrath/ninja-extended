@@ -325,11 +325,9 @@ int real_main(int argc, char** argv) {
     }
   }
 
-  printf("Client connected\n");
-  client.SendCommand();
-  printf("Successfully sent command\n");
-
-  client.Run();
+  printf("Client connected, sending build request\n");
+  client.Build();
+  printf("Build completed");
 
   return 0;
 }

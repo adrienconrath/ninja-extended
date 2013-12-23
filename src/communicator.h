@@ -80,7 +80,7 @@ struct Communicator {
     /// - DESERIALIZATION_ERROR: the server could not read the request;
     /// - NETWORK_ERROR: a network error prevented the message from being sent.
     template <class TRequest, class TResponse>
-      void SendRequest(const TRequest& request,
+      void SendRequest(TRequest& request,
           const boost::function<void(const RequestResult&,
             const TResponse&)>& onCompleted) {
         bg_processor_.Post(
@@ -91,7 +91,7 @@ struct Communicator {
     /// Send a response to a request.
     /// The server can use this to send a response to a request it received.
     template <class TResponse>
-      void SendReply(int request_id, const TResponse& response) {
+      void SendReply(int request_id, TResponse& response) {
         bg_processor_.Post(
             boost::bind(&Communicator::SendReplyBgThread<TResponse>, this,
               request_id, response));
@@ -105,6 +105,7 @@ struct Communicator {
     /// Messages that are waiting to be sent.
     queue<PendingMessage> pending_messages_;
     bool sending_messages_;
+    int header_size_;
 
     /// Map a message type_id to a handler.
     /// This keeps track of all types of request messages the user can respond
@@ -121,11 +122,6 @@ struct Communicator {
     typedef map<int, MessageHandler_t> ResponseHandlers_t;
     ResponseHandlers_t response_handlers_;
 
-    void AsyncReadHeader();
-    void OnReadHeader();
-    void AsyncReadMessage();
-    void OnReadMessage();
-
     template <class TMessage>
       bool SetRequestHandlerBgThread(const boost::function<void(int, const TMessage&)>& handler) {
         int type_id = TMessage::default_instance().type_id();
@@ -140,10 +136,12 @@ struct Communicator {
       }
 
     template <class TRequest, class TResponse>
-      void SendRequestBgThread(const TRequest& request,
+      void SendRequestBgThread(TRequest& request,
           const boost::function<void(const RequestResult&,
             const TResponse&)>& onCompleted) {
         ++request_id_;
+
+        request.set_type_id(TRequest::default_instance().type_id());
 
         ErrorHandler_t completion_handler = boost::bind(
             &Communicator::OnRequestFailed<TResponse>, this,
@@ -169,7 +167,9 @@ struct Communicator {
       }
 
     template <class TResponse>
-      void SendReplyBgThread(int request_id, const TResponse& response) {
+      void SendReplyBgThread(int request_id, TResponse& response) {
+        response.set_type_id(TResponse::default_instance().type_id());
+
         ErrorHandler_t completion_handler = [](const RequestResult& res) {
           // TODO: Ignoring this error for now.
           (void)res;
@@ -260,9 +260,11 @@ struct Communicator {
     template <class TResponse>
       void SetResponseHandler(int request_id,
           const boost::function<void(const RequestResult& res, const TResponse&)>& handler) {
+#if 0
         ResponseHandlers_t::iterator itFind = response_handlers_.find(request_id);
 
         assert(itFind != response_handlers_.end());
+#endif
 
         MessageHandler_t message_handler =
           boost::bind(&Communicator::ParseResponse<TResponse>, this, _1, _2, handler);
