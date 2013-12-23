@@ -14,9 +14,14 @@
 
 #include "communicator.h"
 
-Communicator::Communicator(local::stream_protocol::socket& socket)
-  : request_id_(0), socket_(socket) {
-}
+Communicator::Communicator(local::stream_protocol::socket& socket,
+    IProcessor& bg_processor, IProcessor& processor)
+  : request_id_(0), socket_(socket), bg_processor_(bg_processor),
+  processor_(processor) {
+
+    // Start listening for messages on the background thread.
+    bg_processor_.Post(boost::bind(&Communicator::AsyncReceiveMessage, this));
+  }
 
 // TODO: this should enqueue the message in a queue, and if the queue
 // was empty, this should call AsyncSendMessage.

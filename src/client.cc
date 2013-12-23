@@ -18,7 +18,7 @@ Client::Client(string socket_name)
   : connected_(false), continue_(false),
   socket_name_(socket_name), endpoint_(socket_name_),
   socket_(processor_.Service()),
-  communicator_(socket_) {
+  communicator_(socket_, bg_processor_, processor_) {
   }
 
 void Client::Run() {
@@ -45,7 +45,7 @@ void Client::AsyncConnect(const OnConnectCompletedFn& onConnectCompleted) {
 
   socket_.async_connect(endpoint_,
       boost::bind(&Client::OnConnectCompleted, this, onConnectCompleted,
-	boost::asio::placeholders::error));
+        boost::asio::placeholders::error));
 }
 
 bool Client::Connect() {
@@ -72,7 +72,7 @@ void Client::OnCommandCompleted(const OnCommandCompletedFn& onCommandCompleted,
     printf("Error: %s\n", err.message().c_str());
     onCommandCompleted(false);
     return;
-  } 
+  }
 
   onCommandCompleted(true);
 }
@@ -91,8 +91,8 @@ void Client::OnBuildCompleted(const RequestResult& res,
 void Client::AsyncSendCommand(const OnCommandCompletedFn& onCommandCompleted) {
   assert(connected_);
   async_write(socket_, buffer(dummy_data_), boost::bind(&Client::OnCommandCompleted,
-	this, onCommandCompleted, boost::asio::placeholders::error,
-	boost::asio::placeholders::bytes_transferred));
+        this, onCommandCompleted, boost::asio::placeholders::error,
+        boost::asio::placeholders::bytes_transferred));
 }
 
 bool Client::SendCommand() {

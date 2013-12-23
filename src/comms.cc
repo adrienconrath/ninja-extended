@@ -21,7 +21,7 @@ Comms::Comms(const string& socketName)
   : endpoint_(socketName)
   , acceptor_(processor_.Service())
   , socket_(processor_.Service())
-  , communicator_(socket_) {
+  , communicator_(socket_, processor_, processor_) {
   ::unlink(socketName.c_str());
   acceptor_.open(endpoint_.protocol());
   acceptor_.set_option(local::stream_protocol::acceptor::reuse_address(true));

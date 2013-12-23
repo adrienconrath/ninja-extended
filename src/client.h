@@ -23,6 +23,7 @@
 
 #include "communicator.h"
 #include "processor.h"
+#include "background_processor.h"
 
 using namespace std;
 using namespace boost::asio;
@@ -47,6 +48,7 @@ struct Client {
   bool continue_;
   // TODO: this should be a background processor.
   Processor processor_;
+  BackgroundProcessor bg_processor_;
   string socket_name_;
   local::stream_protocol::endpoint endpoint_;
   local::stream_protocol::socket socket_;

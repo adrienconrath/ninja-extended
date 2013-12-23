@@ -329,6 +329,8 @@ int real_main(int argc, char** argv) {
   client.SendCommand();
   printf("Successfully sent command\n");
 
+  client.Run();
+
   return 0;
 }
 
