@@ -39,6 +39,7 @@ struct Client {
   public:
 
     Client(string socket_name);
+    ~Client();
 
     void Run();
 

@@ -24,6 +24,8 @@ BackgroundProcessor::BackgroundProcessor()
 }
 
 BackgroundProcessor::~BackgroundProcessor() {
+  if (!explicit_stop_)
+    Stop();
   thread_.join();
 }
 

@@ -20,6 +20,11 @@ Client::Client(string socket_name)
   socket_(bg_processor_.Service()) {
   }
 
+Client::~Client() {
+  // Close the socket.
+  socket_.close();
+}
+
 void Client::Run() {
   while (continue_) {
     processor_.RunOne();
@@ -78,6 +83,7 @@ void Client::Build() {
 
   OnBuildCompletedFn fn = [&completed](const RequestResult& res,
     const NinjaMessage::BuildResponse& response) {
+    printf("Client: build completed\n");
     completed = true;
     // Ignore the response for now.
   };

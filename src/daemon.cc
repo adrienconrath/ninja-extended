@@ -577,7 +577,6 @@ void Daemon::TriggerBuildMoveToMainThread(
 }
 
 void Daemon::TriggerBuild(const OnBuildCompletedFn& onBuildCompleted) {
-  printf("Client triggers a build\n");
   // Flush the file monitor so that we know what to rebuild.
   file_monitor_.Flush(boost::bind(
     &Daemon::BuildDirtySetMoveToMainThread, this, onBuildCompleted, _1));

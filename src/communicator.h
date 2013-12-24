@@ -260,11 +260,9 @@ struct Communicator {
     template <class TResponse>
       void SetResponseHandler(int request_id,
           const boost::function<void(const RequestResult& res, const TResponse&)>& handler) {
-#if 0
-        ResponseHandlers_t::iterator itFind = response_handlers_.find(request_id);
 
-        assert(itFind != response_handlers_.end());
-#endif
+        // There should not already be a handler for this request.
+        assert(response_handlers_.find(request_id) == response_handlers_.end());
 
         MessageHandler_t message_handler =
           boost::bind(&Communicator::ParseResponse<TResponse>, this, _1, _2, handler);
@@ -296,6 +294,8 @@ struct Communicator {
       }
 
       // TODO: respond with error message
+      printf("Error: no handler found for this message, type_d %i, "
+          "request_id = %i\n", header.type_id(), header.request_id());
     }
 
     void EnqueueMessage(int request_id, int type_id,

@@ -44,7 +44,7 @@ void Comms::AsyncAccept() {
 }
 
 void Comms::OnAccept(const boost::system::error_code& err) {
-  printf("Client connected\n");
+  printf("Server: client connected\n");
 
   if (err) {
     // TODO: handle this error.
@@ -66,15 +66,13 @@ void Comms::OnAccept(const boost::system::error_code& err) {
 
 /// This runs on the main thread.
 void Comms::OnBuildCompleted(int request_id) {
-  printf("Build completed\n");
   NinjaMessage::BuildResponse response;
   communicator_->SendReply(request_id, response);
 }
 
 void Comms::OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req)
 {
-  printf("OnBuildRequest\n");
-
+  printf("Server: client requests a build\n");
   if (on_build_cmd_) {
     on_build_cmd_(
       bg_processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this, request_id)));

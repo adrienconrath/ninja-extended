@@ -128,8 +128,6 @@ void Communicator::OnWriteMessage(
     return;
   }
 
-  completion_handler(RequestResult::SUCCESS);
-
   SendNextMessage();
 }
 
@@ -146,7 +144,7 @@ void Communicator::OnReadHeader(const boost::system::error_code& err,
     size_t bytes_transferred,
     boost::shared_ptr<std::vector<char>> buf_header) {
   if (err) {
-    printf("Error while reading header\n");
+    printf("Error while reading header: %s\n", err.message().c_str());
     // TODO: inform user of deconnection.
     return;
   }

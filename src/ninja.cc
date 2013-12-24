@@ -115,7 +115,7 @@ const Tool* ChooseTool(const string& tool_name) {
     printf("ninja subtools:\n");
     for (const Tool* tool = &kTools[0]; tool->name; ++tool) {
       if (tool->desc)
-	printf("%10s  %s\n", tool->name, tool->desc);
+        printf("%10s  %s\n", tool->name, tool->desc);
     }
     return NULL;
   }
@@ -131,7 +131,7 @@ const Tool* ChooseTool(const string& tool_name) {
   const char* suggestion = SpellcheckStringV(tool_name, words);
   if (suggestion) {
     Fatal("unknown tool '%s', did you mean '%s'?",
-	tool_name.c_str(), suggestion);
+        tool_name.c_str(), suggestion);
   } else {
     Fatal("unknown tool '%s'", tool_name.c_str());
   }
@@ -143,10 +143,10 @@ const Tool* ChooseTool(const string& tool_name) {
 bool DebugEnable(const string& name) {
   if (name == "list") {
     printf("debugging modes:\n"
-	"  stats    print operation counts/timing info\n"
-	"  explain  explain what caused a command to execute\n"
-	"  keeprsp  don't delete @response files on success\n"
-	"multiple modes can be enabled via -d FOO -d BAR\n");
+        "  stats    print operation counts/timing info\n"
+        "  explain  explain what caused a command to execute\n"
+        "  keeprsp  don't delete @response files on success\n"
+        "multiple modes can be enabled via -d FOO -d BAR\n");
     return false;
   } else if (name == "stats") {
     g_metrics = new Metrics;
@@ -162,7 +162,7 @@ bool DebugEnable(const string& name) {
       SpellcheckString(name.c_str(), "stats", "explain", NULL);
     if (suggestion) {
       Error("unknown debug setting '%s', did you mean '%s'?",
-	  name.c_str(), suggestion);
+          name.c_str(), suggestion);
     } else {
       Error("unknown debug setting '%s'", name.c_str());
     }
@@ -187,64 +187,64 @@ int ReadFlags(int* argc, char*** argv,
   int opt;
   while (!options->tool &&
       (opt = getopt_long(*argc, *argv, "d:f:j:k:l:nt:vC:h", kLongOptions,
-			 NULL)) != -1) {
+                         NULL)) != -1) {
     switch (opt) {
       case 'd':
-	if (!DebugEnable(optarg))
-	  return 1;
-	break;
+        if (!DebugEnable(optarg))
+          return 1;
+        break;
       case 'f':
-	options->input_file = optarg;
-	break;
+        options->input_file = optarg;
+        break;
       case 'j': {
-		  char* end;
-		  int value = strtol(optarg, &end, 10);
-		  if (*end != 0 || value <= 0)
-		    Fatal("invalid -j parameter");
-		  config->parallelism = value;
-		  break;
-		}
+                  char* end;
+                  int value = strtol(optarg, &end, 10);
+                  if (*end != 0 || value <= 0)
+                    Fatal("invalid -j parameter");
+                  config->parallelism = value;
+                  break;
+                }
       case 'k': {
-		  char* end;
-		  int value = strtol(optarg, &end, 10);
-		  if (*end != 0)
-		    Fatal("-k parameter not numeric; did you mean -k 0?");
+                  char* end;
+                  int value = strtol(optarg, &end, 10);
+                  if (*end != 0)
+                    Fatal("-k parameter not numeric; did you mean -k 0?");
 
-		  // We want to go until N jobs fail, which means we should allow
-		  // N failures and then stop.  For N <= 0, INT_MAX is close enough
-		  // to infinite for most sane builds.
-		  config->failures_allowed = value > 0 ? value : INT_MAX;
-		  break;
-		}
+                  // We want to go until N jobs fail, which means we should allow
+                  // N failures and then stop.  For N <= 0, INT_MAX is close enough
+                  // to infinite for most sane builds.
+                  config->failures_allowed = value > 0 ? value : INT_MAX;
+                  break;
+                }
       case 'l': {
-		  char* end;
-		  double value = strtod(optarg, &end);
-		  if (end == optarg)
-		    Fatal("-l parameter not numeric: did you mean -l 0.0?");
-		  config->max_load_average = value;
-		  break;
-		}
+                  char* end;
+                  double value = strtod(optarg, &end);
+                  if (end == optarg)
+                    Fatal("-l parameter not numeric: did you mean -l 0.0?");
+                  config->max_load_average = value;
+                  break;
+                }
       case 'n':
-		config->dry_run = true;
-		break;
+                config->dry_run = true;
+                break;
       case 't':
-		options->tool = ChooseTool(optarg);
-		if (!options->tool)
-		  return 0;
-		break;
+                options->tool = ChooseTool(optarg);
+                if (!options->tool)
+                  return 0;
+                break;
       case 'v':
-		config->verbosity = BuildConfig::VERBOSE;
-		break;
+                config->verbosity = BuildConfig::VERBOSE;
+                break;
       case 'C':
-		options->working_dir = optarg;
-		break;
+                options->working_dir = optarg;
+                break;
       case OPT_VERSION:
-		printf("%s\n", kNinjaVersion);
-		return 0;
+                printf("%s\n", kNinjaVersion);
+                return 0;
       case 'h':
       default:
-		Usage(*config);
-		return 1;
+                Usage(*config);
+                return 1;
     }
   }
   *argv += optind;
@@ -272,6 +272,9 @@ static bool Daemonize(const char* ninja_command, const BuildConfig& config,
 
   // Will run indefinitely until the daemon is asked to stop.
   daemon.Run();
+
+  // TODO: here the client still exists, it should be destroyed earlier in the
+  // process.
   return false;
 }
 
@@ -297,24 +300,31 @@ int real_main(int argc, char** argv) {
     }
   }
 
-  Client client("/tmp/ninja-extended");
+  std::unique_ptr<Client> client(new Client("/tmp/ninja-extended"));
 
-  if (!client.Connect()) {
+  if (!client->Connect()) {
     // Daemon does not exist
-    printf("Creating daemon\n");
+    printf("Client: Creating daemon\n");
+
+    // Reset client before calling fork so that it does not continue to exist
+    // in the daemon process.
+    client.reset(0);
     if (!Daemonize(ninja_command, config, options))
       return 0;
+
+    // Re-create client
+    client.reset(new Client("/tmp/ninja-extended"));
 
     // Trying to reconnect.
     int nb_tries = 0;
     int max_tries = 10;
     bool connected = false;
     do {
-      connected = client.Connect();
+      connected = client->Connect();
       nb_tries++;
 
       if (!connected && nb_tries != max_tries)
-	sleep(1);
+        sleep(1);
     }
     while (!connected && nb_tries != max_tries);
 
@@ -325,9 +335,8 @@ int real_main(int argc, char** argv) {
     }
   }
 
-  printf("Client connected, sending build request\n");
-  client.Build();
-  printf("Build completed");
+  printf("Client: connected\n");
+  client->Build();
 
   return 0;
 }
