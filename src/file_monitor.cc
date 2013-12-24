@@ -159,7 +159,8 @@ bool FileMonitor::HandleEvent(struct inotify_event* event)
     /// descriptor here.
     string err;
     if (!AddNode(node, &err))
-      Error("Error when remonitoring %s: %s", node->path().c_str(), err.c_str());
+      Error("Error when remonitoring %s: %s", node->path().c_str(),
+          err.c_str());
   }
 
   if (mask & IN_Q_OVERFLOW)

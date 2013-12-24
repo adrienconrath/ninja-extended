@@ -67,8 +67,8 @@ struct Communicator {
     };
 
   public:
-    Communicator(local::stream_protocol::socket& socket, IProcessor& bg_processor,
-        IProcessor& processor);
+    Communicator(local::stream_protocol::socket& socket,
+        IProcessor& bg_processor, IProcessor& processor);
 
     ~Communicator();
 
@@ -76,10 +76,11 @@ struct Communicator {
     /// The server can use this in order to set up a handler to be called
     /// when a request of a certain type is received.
     template <class TMessage>
-      void SetRequestHandler(const boost::function<void(int, const TMessage&)>& handler) {
+      void SetRequestHandler(
+          const boost::function<void(int, const TMessage&)>& handler) {
         bg_processor_.Post(
-            boost::bind(&Communicator::SetRequestHandlerBgThread<TMessage>, this,
-              handler));
+            boost::bind(&Communicator::SetRequestHandlerBgThread<TMessage>,
+              this, handler));
       }
 
     /// Send a request with a handler to be used for the response.
@@ -98,8 +99,8 @@ struct Communicator {
           const boost::function<void(const RequestResult&,
             const TResponse&)>& onCompleted) {
         bg_processor_.Post(
-            boost::bind(&Communicator::SendRequestBgThread<TRequest, TResponse>, this,
-              request, onCompleted));
+            boost::bind(&Communicator::SendRequestBgThread<TRequest, TResponse>,
+              this, request, onCompleted));
       }
 
     /// Send a response to a request.
@@ -154,11 +155,13 @@ struct Communicator {
     ResponseHandlers_t response_handlers_;
 
     template <class TMessage>
-      bool SetRequestHandlerBgThread(const boost::function<void(int, const TMessage&)>& handler) {
+      bool SetRequestHandlerBgThread(
+          const boost::function<void(int, const TMessage&)>& handler) {
         int type_id = TMessage::default_instance().type_id();
 
         MessageHandler_t message_handler =
-          boost::bind(&Communicator::ParseRequest<TMessage>, this, _1, _2, handler);
+          boost::bind(&Communicator::ParseRequest<TMessage>, this, _1, _2,
+              handler);
 
         // If a handler already exists for this type, it is overwritten.
         request_handlers_[type_id] = message_handler;
@@ -180,12 +183,14 @@ struct Communicator {
 
         // Set up the handler for the response. This hanler will be called
         // if a message is sent with the same request_id.
-        boost::function<void(const RequestResult&, const TResponse&)> responseHandler =
+        boost::function<void(const RequestResult&, const TResponse&)>
+          responseHandler =
           boost::bind(&Communicator::OnResponseReceived<TResponse>, this,
               _1, _2, onCompleted, request_id_);
         SetResponseHandler<TResponse>(request_id_, responseHandler);
 
-        boost::shared_ptr<boost::asio::streambuf> buf(new boost::asio::streambuf());
+        boost::shared_ptr<boost::asio::streambuf> buf(
+            new boost::asio::streambuf());
         std::ostream os(buf.get());
         if (!request.SerializeToOstream(&os)) {
           printf("Error while serializing request message\n");
@@ -207,7 +212,8 @@ struct Communicator {
           (void)res;
         };
 
-        boost::shared_ptr<boost::asio::streambuf> buf(new boost::asio::streambuf());
+        boost::shared_ptr<boost::asio::streambuf> buf(
+            new boost::asio::streambuf());
         std::ostream os(buf.get());
         if (!response.SerializeToOstream(&os)) {
           printf("Error while serializing response message\n");
@@ -280,7 +286,8 @@ struct Communicator {
 
     /// Handler for a response.
     template <class TResponse>
-      void OnResponseReceived(const RequestResult& req, const TResponse& response,
+      void OnResponseReceived(const RequestResult& req,
+          const TResponse& response,
           const boost::function<void(const RequestResult&,
             const TResponse&)> onCompleted, int request_id) {
 
@@ -291,13 +298,15 @@ struct Communicator {
     /// Set up a handler for a response.
     template <class TResponse>
       void SetResponseHandler(int request_id,
-          const boost::function<void(const RequestResult& res, const TResponse&)>& handler) {
+          const boost::function<void(const RequestResult& res,
+            const TResponse&)>& handler) {
 
         // There should not already be a handler for this request.
         assert(response_handlers_.find(request_id) == response_handlers_.end());
 
         MessageHandler_t message_handler =
-          boost::bind(&Communicator::ParseResponse<TResponse>, this, _1, _2, handler);
+          boost::bind(&Communicator::ParseResponse<TResponse>, this, _1, _2,
+              handler);
 
         response_handlers_[request_id] = message_handler;
       }
@@ -309,7 +318,8 @@ struct Communicator {
         const std::string& buf) {
       {
         // Try to find a request handler for this message.
-        RequestHandlers_t::iterator itFind = request_handlers_.find(header.type_id());
+        RequestHandlers_t::iterator itFind = request_handlers_.find(
+            header.type_id());
         if (itFind != request_handlers_.end()) {
           itFind->second(header, buf);
           return;
@@ -318,7 +328,8 @@ struct Communicator {
 
       {
         // Try to find a response handler for this message.
-        ResponseHandlers_t::iterator itFind = response_handlers_.find(header.request_id());
+        ResponseHandlers_t::iterator itFind = response_handlers_.find(
+            header.request_id());
         if (itFind != response_handlers_.end()) {
           itFind->second(header, buf);
           return;

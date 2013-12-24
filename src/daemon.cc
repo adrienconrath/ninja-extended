@@ -595,7 +595,8 @@ void Daemon::TriggerStop() {
   continue_ = false;
 }
 
-void Daemon::BuildDirtySetMoveToMainThread(const OnBuildCompletedFn& onBuildCompleted,
+void Daemon::BuildDirtySetMoveToMainThread(
+    const OnBuildCompletedFn& onBuildCompleted,
     const boost::shared_ptr<vector<Node*>>& changed_files) {
   processor_.Post(boost::bind(
         &Daemon::BuildDirtySet, this, onBuildCompleted, changed_files));

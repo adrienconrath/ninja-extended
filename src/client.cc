@@ -88,7 +88,8 @@ bool Client::Connect() {
 
 void Client::AsyncBuild(const OnBuildCompletedFn& onBuildCompleted) {
   NinjaMessage::BuildRequest req;
-  communicator_->SendRequest<NinjaMessage::BuildRequest, NinjaMessage::BuildResponse>(
+  communicator_->SendRequest<NinjaMessage::BuildRequest,
+    NinjaMessage::BuildResponse>(
       req, onBuildCompleted);
 }
 

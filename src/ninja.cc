@@ -61,7 +61,8 @@ void Usage(const BuildConfig& config) {
       "  -C DIR   change to DIR before doing anything else\n"
       "  -f FILE  specify input build file [default=build.ninja]\n"
       "\n"
-      "  -j N     run N jobs in parallel [default=%d, derived from CPUs available]\n"
+      "  -j N     run N jobs in parallel [default=%d, derived from CPUs "
+      "available]\n"
       "  -l N     do not start new jobs if the load average is greater than N\n"
       "  -k N     keep going until N jobs fail [default=1]\n"
       "  -n       dry run (don't run commands but act like they succeeded)\n"
@@ -212,9 +213,10 @@ int ReadFlags(int* argc, char*** argv,
                   if (*end != 0)
                     Fatal("-k parameter not numeric; did you mean -k 0?");
 
-                  // We want to go until N jobs fail, which means we should allow
-                  // N failures and then stop.  For N <= 0, INT_MAX is close enough
-                  // to infinite for most sane builds.
+                  // We want to go until N jobs fail, which means we should
+                  // allow N failures and then stop.
+                  // For N <= 0, INT_MAX is close enough to infinite for most
+                  // sane builds.
                   config->failures_allowed = value > 0 ? value : INT_MAX;
                   break;
                 }

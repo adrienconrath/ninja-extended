@@ -23,7 +23,8 @@
     , socket_(bg_processor_.Service()) {
       ::unlink(socketName.c_str());
       acceptor_.open(endpoint_.protocol());
-      acceptor_.set_option(local::stream_protocol::acceptor::reuse_address(true));
+      acceptor_.set_option(
+          local::stream_protocol::acceptor::reuse_address(true));
       acceptor_.bind(endpoint_);
       acceptor_.listen();
 
@@ -90,11 +91,13 @@ void Comms::OnBuildCompleted(int request_id) {
   communicator_->SendReply(request_id, response);
 }
 
-void Comms::OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req)
+void Comms::OnBuildRequest(int request_id,
+    const NinjaMessage::BuildRequest& req)
 {
   if (on_build_cmd_) {
     on_build_cmd_(
-        bg_processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this, request_id)));
+        bg_processor_.BindPost(
+          boost::bind(&Comms::OnBuildCompleted, this, request_id)));
   }
 }
 

@@ -98,7 +98,8 @@ void Communicator::AsyncSendMessage(
   header->set_size(buf_message->size());
   header->set_request_id(request_id);
 
-  boost::shared_ptr<boost::asio::streambuf> buf_header(new boost::asio::streambuf());
+  boost::shared_ptr<boost::asio::streambuf> buf_header(
+      new boost::asio::streambuf());
   std::ostream os(buf_header.get());
 
   if (!header->SerializeToOstream(&os)) {
@@ -115,7 +116,8 @@ void Communicator::AsyncWriteHeader(
     boost::shared_ptr<boost::asio::streambuf>& buf_message,
     const ErrorHandler_t& completion_handler) {
 
-  async_write(socket_, *buf_header.get(), boost::bind(&Communicator::OnWriteHeader,
+  async_write(socket_, *buf_header.get(),
+      boost::bind(&Communicator::OnWriteHeader,
         this, boost::asio::placeholders::error,
         boost::asio::placeholders::bytes_transferred,
         buf_header, buf_message, completion_handler));
@@ -140,7 +142,8 @@ void Communicator::AsyncWriteMessage(
     boost::shared_ptr<boost::asio::streambuf>& buf_message,
     const ErrorHandler_t& completion_handler) {
 
-  async_write(socket_, *buf_message.get(), boost::bind(&Communicator::OnWriteMessage,
+  async_write(socket_, *buf_message.get(),
+      boost::bind(&Communicator::OnWriteMessage,
         this, boost::asio::placeholders::error,
         boost::asio::placeholders::bytes_transferred,
         buf_message, completion_handler));
@@ -165,7 +168,8 @@ void Communicator::AsyncReceiveMessage() {
       new std::vector<char>(header_size_));
 
   async_read(socket_, boost::asio::buffer(*buf_header.get(), header_size_),
-      boost::bind(&Communicator::OnReadHeader, this, boost::asio::placeholders::error,
+      boost::bind(&Communicator::OnReadHeader, this,
+        boost::asio::placeholders::error,
         boost::asio::placeholders::bytes_transferred, buf_header));
 }
 
@@ -189,7 +193,8 @@ void Communicator::OnReadHeader(const boost::system::error_code& err,
       new std::vector<char>(header->size()));
 
   async_read(socket_, boost::asio::buffer(*buf_message.get(), header->size()),
-      boost::bind(&Communicator::OnReadMessage, this, boost::asio::placeholders::error,
+      boost::bind(&Communicator::OnReadMessage, this,
+        boost::asio::placeholders::error,
         boost::asio::placeholders::bytes_transferred, header, buf_message));
 }
 
