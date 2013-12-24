@@ -17,18 +17,18 @@
 
 #include "comms.h"
 
-Comms::Comms(const string& socketName)
+  Comms::Comms(const string& socketName)
   : stopped_(false), endpoint_(socketName)
-  , acceptor_(bg_processor_.Service())
-  , socket_(bg_processor_.Service()) {
-  ::unlink(socketName.c_str());
-  acceptor_.open(endpoint_.protocol());
-  acceptor_.set_option(local::stream_protocol::acceptor::reuse_address(true));
-  acceptor_.bind(endpoint_);
-  acceptor_.listen();
+    , acceptor_(bg_processor_.Service())
+    , socket_(bg_processor_.Service()) {
+      ::unlink(socketName.c_str());
+      acceptor_.open(endpoint_.protocol());
+      acceptor_.set_option(local::stream_protocol::acceptor::reuse_address(true));
+      acceptor_.bind(endpoint_);
+      acceptor_.listen();
 
-  AsyncAccept();
-}
+      AsyncAccept();
+    }
 
 Comms::~Comms() {
   // TODO: verify that the communicator_ has been stopped before destroying
@@ -47,15 +47,18 @@ void Comms::SetOnBuildCmdFn(const OnBuildCmdFn& on_build_cmd)
 
 void Comms::AsyncAccept() {
   acceptor_.async_accept(socket_,
-    boost::bind(&Comms::OnAccept, this, boost::asio::placeholders::error));
+      boost::bind(&Comms::OnAccept, this, boost::asio::placeholders::error));
 }
 
 void Comms::OnAccept(const boost::system::error_code& err) {
-  printf("Server: client connected\n");
-
   if (err) {
-    // TODO: handle this error.
-    printf("Error: %s\n", err.message().c_str());
+    if (err == boost::asio::error::operation_aborted) {
+      // The daemon was stopped.
+    }
+    else {
+      // TODO: handle this error.
+      printf("Error: %s\n", err.message().c_str());
+    }
     return;
   }
 
@@ -72,8 +75,6 @@ void Comms::OnAccept(const boost::system::error_code& err) {
 }
 
 void Comms::OnConnectionClosed() {
-  printf("Server: client disconnected\n");
-
   socket_.shutdown(local::stream_protocol::socket::shutdown_both);
   socket_.close();
   communicator_.reset(0);
@@ -87,15 +88,13 @@ void Comms::OnConnectionClosed() {
 void Comms::OnBuildCompleted(int request_id) {
   NinjaMessage::BuildResponse response;
   communicator_->SendReply(request_id, response);
-  printf("Server: build completed\n");
 }
 
 void Comms::OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req)
 {
-  printf("Server: client requests a build\n");
   if (on_build_cmd_) {
     on_build_cmd_(
-      bg_processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this, request_id)));
+        bg_processor_.BindPost(boost::bind(&Comms::OnBuildCompleted, this, request_id)));
   }
 }
 
@@ -110,7 +109,6 @@ void Comms::OnStopRequest(int request_id, const NinjaMessage::StopRequest& req)
   // Response immediately.
   NinjaMessage::StopResponse response;
   communicator_->SendReply(request_id, response);
-  printf("Server: stopping...\n");
 
   stopped_ = true;
   communicator_->AsyncClose(boost::bind(&Comms::OnCloseCompleted, this));

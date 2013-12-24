@@ -30,12 +30,12 @@
 #include "state.h"
 #include "util.h"
 
-FileMonitor::FileMonitor(State* state)
-  : state_(state), stream_(processor_.Service())
+  FileMonitor::FileMonitor(State* state)
+: state_(state), stream_(processor_.Service())
   , changed_files_(new vector<Node*>) {
     inotify_fd_ = inotify_init();
     stream_.assign(inotify_fd_);
-}
+  }
 
 bool FileMonitor::Start(string* err) {
   if (inotify_fd_ < 0){
@@ -68,11 +68,11 @@ bool FileMonitor::LoadSubTarget(Node* node, string* err) {
   }
   else {
     for (vector<Node*>::iterator i = edge->inputs_.begin();
-	 i != edge->inputs_.end(); ++i) {
+        i != edge->inputs_.end(); ++i) {
       if ((*i)->dirty())
-	continue; // No need to monitor a dirty node.
+        continue; // No need to monitor a dirty node.
       if (!LoadSubTarget(*i, err))
-	return false;
+        return false;
     }
   }
 
@@ -84,11 +84,11 @@ bool FileMonitor::LoadSubTarget(Node* node, string* err) {
 bool FileMonitor::AddNode(Node* node, string* err) {
 
   int wd = inotify_add_watch(inotify_fd_, node->path().c_str(),
-    IN_CLOSE_WRITE |
-    IN_MODIFY |
-    IN_MOVE_SELF |
-    IN_DELETE_SELF |
-    IN_DELETE);
+      IN_CLOSE_WRITE |
+      IN_MODIFY |
+      IN_MOVE_SELF |
+      IN_DELETE_SELF |
+      IN_DELETE);
   if (wd < 0) {
     *err = "error with inotify_add_watch for node ";
     *err += node->path().c_str();
@@ -103,15 +103,20 @@ bool FileMonitor::AddNode(Node* node, string* err) {
 
 void FileMonitor::AsyncRead() {
   stream_.async_read_some(boost::asio::buffer(buffer_),
-    boost::bind(&FileMonitor::HandleRead, this,
-    boost::asio::placeholders::error,
-    boost::asio::placeholders::bytes_transferred));
+      boost::bind(&FileMonitor::HandleRead, this,
+        boost::asio::placeholders::error,
+        boost::asio::placeholders::bytes_transferred));
 }
 
 void FileMonitor::HandleRead(boost::system::error_code err,
-  std::size_t bytes_transferred) {
+    std::size_t bytes_transferred) {
   if (err) {
-    Error("%s", err.message().c_str());
+    if (err == boost::asio::error::operation_aborted) {
+      // The daemon was stopped.
+    }
+    else {
+      Error("%s", err.message().c_str());
+    }
     return;
   }
 
@@ -188,7 +193,7 @@ bool FileMonitor::MarkNodeDirty(Node* node, int wd, string* err)
 void FileMonitor::MonitorNodeBgThread(Node* node) {
   // This should be a leaf node.
   assert(!node->in_edge() || (node->in_edge()->is_phony()
-    && node->in_edge()->inputs_.empty()));
+        && node->in_edge()->inputs_.empty()));
   assert(!node->monitored());
 
   node->MarkMonitored();
@@ -210,5 +215,5 @@ void FileMonitor::FlushBgThread(const OnFlushCompletedFn& onCompleted) {
 /// Called from the main thread.
 void FileMonitor::Flush(const OnFlushCompletedFn& onCompleted) {
   processor_.Post(boost::bind(&FileMonitor::FlushBgThread, this,
-    onCompleted));
+        onCompleted));
 }

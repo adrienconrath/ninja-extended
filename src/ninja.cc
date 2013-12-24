@@ -278,8 +278,6 @@ static bool Daemonize(const char* ninja_command, const BuildConfig& config,
   // Will run indefinitely until the daemon is asked to stop.
   daemon.Run();
 
-  // TODO: here the client still exists, it should be destroyed earlier in the
-  // process.
   return false;
 }
 

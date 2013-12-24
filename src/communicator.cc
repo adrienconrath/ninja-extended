@@ -74,7 +74,8 @@ void Communicator::SendNextMessage() {
 }
 
 void Communicator::OnConnectionClosed() {
-  assert(state_ != State::CLOSED);
+  if (state_ == State::CLOSED)
+    return;
 
   if (state_ == State::CLOSING) {
     // Notify that the async close operation completed.
@@ -172,7 +173,6 @@ void Communicator::OnReadHeader(const boost::system::error_code& err,
     size_t bytes_transferred,
     boost::shared_ptr<std::vector<char>> buf_header) {
   if (err) {
-    printf("Error while reading header: %s\n", err.message().c_str());
     OnConnectionClosed();
     return;
   }

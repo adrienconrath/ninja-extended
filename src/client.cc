@@ -97,7 +97,6 @@ void Client::Build() {
 
   OnBuildCompletedFn fn = [&completed](const RequestResult& res,
     const NinjaMessage::BuildResponse& response) {
-    printf("Client: build completed\n");
     completed = true;
     // Ignore the response for now.
   };
@@ -120,7 +119,6 @@ void Client::StopDaemon() {
 
   OnStopCompletedFn fn = [&completed](const RequestResult& res,
     const NinjaMessage::StopResponse& response) {
-    printf("Client: daemon stopped\n");
     completed = true;
     // Ignore the response for now.
   };
