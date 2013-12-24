@@ -335,7 +335,6 @@ int real_main(int argc, char** argv) {
     }
   }
 
-  printf("Client: connected\n");
   client->Build();
 
   return 0;

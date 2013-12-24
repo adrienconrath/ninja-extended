@@ -60,6 +60,11 @@ void Communicator::SendNextMessage() {
   pending_messages_.pop();
 }
 
+void Communicator::OnConnectionClosed() {
+  if (on_connection_closed_)
+    processor_.Post(on_connection_closed_);
+}
+
 void Communicator::AsyncSendMessage(
     int request_id, int type_id,
     boost::shared_ptr<boost::asio::streambuf>& buf_message,
@@ -100,7 +105,7 @@ void Communicator::OnWriteHeader(
   if (err) {
     printf("Error while sending header: %s\n", err.message().c_str());
     completion_handler(RequestResult::NETWORK_ERROR);
-    // TODO: close socket?
+    OnConnectionClosed();
     return;
   }
 
@@ -124,7 +129,7 @@ void Communicator::OnWriteMessage(
   if (err) {
     printf("Error while sending message\n");
     completion_handler(RequestResult::NETWORK_ERROR);
-    // TODO: close socket?
+    OnConnectionClosed();
     return;
   }
 
@@ -145,7 +150,7 @@ void Communicator::OnReadHeader(const boost::system::error_code& err,
     boost::shared_ptr<std::vector<char>> buf_header) {
   if (err) {
     printf("Error while reading header: %s\n", err.message().c_str());
-    // TODO: inform user of deconnection.
+    OnConnectionClosed();
     return;
   }
 
@@ -171,10 +176,14 @@ void Communicator::OnReadMessage(const boost::system::error_code& err,
     boost::shared_ptr<std::vector<char>> buf_message) {
   if (err) {
     printf("Error while reading message\n");
-    // TODO: inform of deconnection.
+    OnConnectionClosed();
     return;
   }
 
   std::string buf(buf_message->begin(), buf_message->end());
   OnMessageReceived(*header.get(), buf);
+
+
+  // Start listening for new messages.
+  AsyncReceiveMessage();
 }

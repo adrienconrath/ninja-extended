@@ -22,6 +22,7 @@ Client::Client(string socket_name)
 
 Client::~Client() {
   // Close the socket.
+  socket_.shutdown(local::stream_protocol::socket::shutdown_both);
   socket_.close();
 }
 

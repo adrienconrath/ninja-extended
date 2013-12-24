@@ -54,8 +54,10 @@ void Comms::OnAccept(const boost::system::error_code& err) {
 
   // Create the communicator
   communicator_.reset(new Communicator(socket_, bg_processor_, bg_processor_));
+  communicator_->SetOnConnectionClosedFn(
+      boost::bind(&Comms::OnConnectionClosed, this));
 
-  // Set the handlers
+  // Set the request handlers
   communicator_->SetRequestHandler<NinjaMessage::StopRequest>(
       boost::bind(&Comms::OnStopRequest, this, _1, _2));
   communicator_->SetRequestHandler<NinjaMessage::BuildRequest>(
@@ -64,10 +66,21 @@ void Comms::OnAccept(const boost::system::error_code& err) {
   // TODO: set handler so that the communicator can inform we are disconnected.
 }
 
-/// This runs on the main thread.
+void Comms::OnConnectionClosed() {
+  printf("Server: client disconnected\n");
+
+  socket_.shutdown(local::stream_protocol::socket::shutdown_both);
+  socket_.close();
+  communicator_.reset(0);
+
+  // When the connection is closed, we can start accepting again.
+  AsyncAccept();
+}
+
 void Comms::OnBuildCompleted(int request_id) {
   NinjaMessage::BuildResponse response;
   communicator_->SendReply(request_id, response);
+  printf("Server: build completed\n");
 }
 
 void Comms::OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req)

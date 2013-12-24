@@ -46,6 +46,10 @@ struct Communicator {
     /// Handler used to process a request.
     typedef boost::function<void(const NinjaMessage::Header&,
         const std::string& buf)> MessageHandler_t;
+    /// Handler used to inform that the connection has been closed.
+    /// TODO: this handler could be passed a parameter that informs of the type
+    /// of error.
+    typedef boost::function<void(void)> OnConnectionClosedFn;
 
     struct PendingMessage {
       int request_id_;
@@ -97,6 +101,11 @@ struct Communicator {
               request_id, response));
       }
 
+    /// Set a handler to be called when the connection is closed.
+    void SetOnConnectionClosedFn(const OnConnectionClosedFn& fn) {
+      on_connection_closed_ = fn;
+    }
+
   private:
     int request_id_;
     local::stream_protocol::socket& socket_;
@@ -106,6 +115,7 @@ struct Communicator {
     queue<PendingMessage> pending_messages_;
     bool sending_messages_;
     int header_size_;
+    OnConnectionClosedFn on_connection_closed_;
 
     /// Map a message type_id to a handler.
     /// This keeps track of all types of request messages the user can respond
@@ -172,6 +182,7 @@ struct Communicator {
 
         ErrorHandler_t completion_handler = [](const RequestResult& res) {
           // TODO: Ignoring this error for now.
+          printf("Error when sending reply\n");
           (void)res;
         };
 
@@ -303,6 +314,8 @@ struct Communicator {
         const ErrorHandler_t& completion_handler);
 
     void SendNextMessage();
+
+    void OnConnectionClosed();
 
     void AsyncSendMessage(int request_id, int type_id,
         boost::shared_ptr<boost::asio::streambuf>& buf_message,

@@ -47,7 +47,6 @@ struct Comms {
   local::stream_protocol::acceptor acceptor_;
   local::stream_protocol::socket socket_;
   std::unique_ptr<Communicator> communicator_;
-  boost::array<char, 1024> data_;
 
   /// Action to be taken when the client requires a build.
   OnBuildCmdFn on_build_cmd_;
@@ -58,6 +57,7 @@ struct Comms {
   void OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req);
   void OnStopRequest(int request_id, const NinjaMessage::StopRequest& req);
 
+  void OnConnectionClosed();
   void OnBuildCompleted(int request_id);
 };
 
