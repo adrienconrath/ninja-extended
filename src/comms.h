@@ -30,6 +30,7 @@ using namespace boost::asio;
 typedef boost::function<void(void)> OnBuildCompletedFn;
 /// TODO: the targets and options should be parameters.
 typedef boost::function<void(const OnBuildCompletedFn&)> OnBuildCmdFn;
+typedef boost::function<void(void)> OnStopCmdFn;
 
 /// Communicate with client on a unix socket.
 struct Comms {
@@ -38,8 +39,12 @@ struct Comms {
   ~Comms();
 
   void SetOnBuildCmdFn(const OnBuildCmdFn& on_build_cmd);
+  void SetOnStopCmdFn(const OnStopCmdFn& on_stop_cmd);
 
   private:
+
+  bool stopped_;
+
   /// Communications take place in their own thread.
   BackgroundProcessor bg_processor_;
 
@@ -50,6 +55,8 @@ struct Comms {
 
   /// Action to be taken when the client requires a build.
   OnBuildCmdFn on_build_cmd_;
+  /// Action to be taken the client requires the daemon to stop.
+  OnStopCmdFn on_stop_cmd_;
 
   void AsyncAccept();
   void OnAccept(const boost::system::error_code& err);
@@ -59,6 +66,8 @@ struct Comms {
 
   void OnConnectionClosed();
   void OnBuildCompleted(int request_id);
+
+  void OnCloseCompleted();
 };
 
 #endif  // NINJA_COMMS_H_

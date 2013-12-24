@@ -16,8 +16,9 @@
 
 Communicator::Communicator(local::stream_protocol::socket& socket,
     IProcessor& bg_processor, IProcessor& processor)
-  : request_id_(0), socket_(socket), bg_processor_(bg_processor),
-  processor_(processor), sending_messages_(false) {
+  : state_(State::OPEN), request_id_(0), socket_(socket),
+  bg_processor_(bg_processor), processor_(processor),
+  sending_messages_(false) {
 
     // Create a dummy header and calculate its size.
     // XXX: is there a way to compute the size of a Header
@@ -32,9 +33,16 @@ Communicator::Communicator(local::stream_protocol::socket& socket,
     bg_processor_.Post(boost::bind(&Communicator::AsyncReceiveMessage, this));
   }
 
+Communicator::~Communicator() {
+  assert(state_ == State::CLOSED);
+}
+
 void Communicator::EnqueueMessage(int request_id, int type_id,
     boost::shared_ptr<boost::asio::streambuf>& buf_message,
     const ErrorHandler_t& completion_handler) {
+
+  // Enqueuing a message after this object closed is a programming error.
+  assert(state_ != State::CLOSED);
 
   pending_messages_.push(PendingMessage{request_id, type_id, buf_message,
       completion_handler});
@@ -49,6 +57,11 @@ void Communicator::SendNextMessage() {
   if (pending_messages_.empty()) {
     // There are no more messages to be sent.
     sending_messages_ = false;
+    if (state_ == State::CLOSING) {
+      // Now that all messages have been sent, we can close.
+      processor_.Post(on_close_completed_);
+      state_ = State::CLOSED;
+    }
     return;
   }
 
@@ -61,8 +74,18 @@ void Communicator::SendNextMessage() {
 }
 
 void Communicator::OnConnectionClosed() {
-  if (on_connection_closed_)
+  assert(state_ != State::CLOSED);
+
+  if (state_ == State::CLOSING) {
+    // Notify that the async close operation completed.
+    processor_.Post(on_close_completed_);
+  }
+  else if (on_connection_closed_) {
+    // Notify that there was a network error.
     processor_.Post(on_connection_closed_);
+  }
+
+  state_ = State::CLOSED;
 }
 
 void Communicator::AsyncSendMessage(
@@ -183,7 +206,29 @@ void Communicator::OnReadMessage(const boost::system::error_code& err,
   std::string buf(buf_message->begin(), buf_message->end());
   OnMessageReceived(*header.get(), buf);
 
+  if (state_ == State::OPEN) {
+    // Start listening for new messages.
+    AsyncReceiveMessage();
+  }
+  else {
+    processor_.Post(on_close_completed_);
+    state_ = State::CLOSED;
+  }
+}
 
-  // Start listening for new messages.
-  AsyncReceiveMessage();
+void Communicator::AsyncClose(const OnCloseCompletedFn& onCloseCompleted) {
+  if (state_ == State::CLOSED) {
+    // The connection had already closed by itself.
+    processor_.Post(onCloseCompleted);
+    return;
+  }
+
+  // This is a programmer error, the user should call AsyncClose only once.
+  assert(state_ != State::CLOSING);
+
+  // This will cause the reading and writting loops to stop.
+  // All messages that were enqueued will be sent before the completion handler
+  // is called.
+  state_ = State::CLOSING;
+  on_close_completed_ = onCloseCompleted;
 }

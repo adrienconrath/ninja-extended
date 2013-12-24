@@ -35,6 +35,8 @@ struct Client {
     typedef boost::function<void(bool)> OnConnectCompletedFn;
     typedef boost::function<void(const RequestResult&,
         const NinjaMessage::BuildResponse&)> OnBuildCompletedFn;
+    typedef boost::function<void(const RequestResult&,
+        const NinjaMessage::StopResponse&)> OnStopCompletedFn;
 
   public:
 
@@ -49,6 +51,9 @@ struct Client {
     void AsyncBuild(const OnBuildCompletedFn& onBuildCompleted);
     void Build();
 
+    void AsyncStopDaemon(const OnStopCompletedFn& onStopCompleted);
+    void StopDaemon();
+
   private:
     bool connected_;
     bool continue_;
@@ -60,6 +65,7 @@ struct Client {
     local::stream_protocol::socket socket_;
     std::unique_ptr<Communicator> communicator_;
 
+    void OnConnectionClosed();
     void OnConnectCompleted(const OnConnectCompletedFn& onConnectCompleted,
         boost::system::error_code err);
 };

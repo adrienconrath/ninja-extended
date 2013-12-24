@@ -41,6 +41,12 @@ enum RequestResult {
 /// posted on the main thread.
 struct Communicator {
   private:
+    enum State {
+      OPEN,
+      CLOSING,
+      CLOSED
+    };
+
     /// Handler used to terminate the sending of a request.
     typedef boost::function<void(const RequestResult&)> ErrorHandler_t;
     /// Handler used to process a request.
@@ -50,6 +56,8 @@ struct Communicator {
     /// TODO: this handler could be passed a parameter that informs of the type
     /// of error.
     typedef boost::function<void(void)> OnConnectionClosedFn;
+    /// Handler used to inform that the async close operation has completed.
+    typedef boost::function<void(void)> OnCloseCompletedFn;
 
     struct PendingMessage {
       int request_id_;
@@ -61,6 +69,8 @@ struct Communicator {
   public:
     Communicator(local::stream_protocol::socket& socket, IProcessor& bg_processor,
         IProcessor& processor);
+
+    ~Communicator();
 
     /// Set up a handler for a request.
     /// The server can use this in order to set up a handler to be called
@@ -102,11 +112,19 @@ struct Communicator {
       }
 
     /// Set a handler to be called when the connection is closed.
+    /// The handler is called on the main thread.
     void SetOnConnectionClosedFn(const OnConnectionClosedFn& fn) {
       on_connection_closed_ = fn;
     }
 
+    /// Close the Communicator. Execute the handler when the operation
+    /// completes. It is guaranteed that no other handler will be enqueued
+    /// after onCloseCompleted so that the user can safely destroy this object.
+    /// onCloseCompleted is posted on the main thread.
+    void AsyncClose(const OnCloseCompletedFn& onCloseCompleted);
+
   private:
+    State state_;
     int request_id_;
     local::stream_protocol::socket& socket_;
     IProcessor& bg_processor_;
@@ -115,7 +133,10 @@ struct Communicator {
     queue<PendingMessage> pending_messages_;
     bool sending_messages_;
     int header_size_;
+    /// Called when the connection is closed because of a network error.
     OnConnectionClosedFn on_connection_closed_;
+    /// Called when the connection is closed after the user requested it.
+    OnCloseCompletedFn on_close_completed_;
 
     /// Map a message type_id to a handler.
     /// This keeps track of all types of request messages the user can respond

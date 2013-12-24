@@ -21,15 +21,26 @@ Client::Client(string socket_name)
   }
 
 Client::~Client() {
+  // TODO: call communicator_->AsyncClose(...)
+
   // Close the socket.
   socket_.shutdown(local::stream_protocol::socket::shutdown_both);
   socket_.close();
+
+  // Wait for the communicator to call OnConnectionClosed before resetting it.
+  while (connected_) {
+    processor_.RunOne();
+  }
 }
 
 void Client::Run() {
   while (continue_) {
     processor_.RunOne();
   }
+}
+
+void Client::OnConnectionClosed() {
+  connected_ = false;
 }
 
 void Client::OnConnectCompleted(const OnConnectCompletedFn& onConnectCompleted,
@@ -43,6 +54,8 @@ void Client::OnConnectCompleted(const OnConnectCompletedFn& onConnectCompleted,
 
   // Create the communicator
   communicator_.reset(new Communicator(socket_, bg_processor_, processor_));
+  communicator_->SetOnConnectionClosedFn(
+      boost::bind(&Client::OnConnectionClosed, this));
 
   connected_ = true;
   processor_.Post(boost::bind(onConnectCompleted, true));
@@ -95,3 +108,25 @@ void Client::Build() {
   }
 }
 
+void Client::AsyncStopDaemon(const OnStopCompletedFn& onStopCompleted) {
+  NinjaMessage::StopRequest req;
+  communicator_->
+    SendRequest<NinjaMessage::StopRequest, NinjaMessage::StopResponse>(
+        req, onStopCompleted);
+}
+
+void Client::StopDaemon() {
+  bool completed = false;
+
+  OnStopCompletedFn fn = [&completed](const RequestResult& res,
+    const NinjaMessage::StopResponse& response) {
+    printf("Client: daemon stopped\n");
+    completed = true;
+    // Ignore the response for now.
+  };
+
+  AsyncStopDaemon(fn);
+  while (!completed) {
+    processor_.RunOne();
+  }
+}

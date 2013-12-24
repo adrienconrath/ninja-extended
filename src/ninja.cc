@@ -69,8 +69,10 @@ void Usage(const BuildConfig& config) {
       "\n"
       "  -d MODE  enable debugging (use -d list to list modes)\n"
       "  -t TOOL  run a subtool (use -t list to list subtools)\n"
-      "    terminates toplevel options; further flags are passed to the tool\n",
-      kNinjaVersion, config.parallelism);
+      "    terminates toplevel options; further flags are passed to the tool\n"
+      "\n"
+      "  -K       Stop the daemon\n",
+        kNinjaVersion, config.parallelism);
 }
 
 /// Choose a default value for the -j (parallelism) flag.
@@ -186,7 +188,7 @@ int ReadFlags(int* argc, char*** argv,
 
   int opt;
   while (!options->tool &&
-      (opt = getopt_long(*argc, *argv, "d:f:j:k:l:nt:vC:h", kLongOptions,
+      (opt = getopt_long(*argc, *argv, "d:f:j:k:l:nt:vC:h:K", kLongOptions,
                          NULL)) != -1) {
     switch (opt) {
       case 'd':
@@ -238,6 +240,9 @@ int ReadFlags(int* argc, char*** argv,
       case 'C':
                 options->working_dir = optarg;
                 break;
+      case 'K':
+                config->stop_daemon = true;
+                break;
       case OPT_VERSION:
                 printf("%s\n", kNinjaVersion);
                 return 0;
@@ -278,28 +283,20 @@ static bool Daemonize(const char* ninja_command, const BuildConfig& config,
   return false;
 }
 
-int real_main(int argc, char** argv) {
-  BuildConfig config;
-  Options options = {};
-  options.input_file = "build.ninja";
-
-  setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
-  const char* ninja_command = argv[0];
-
-  int exit_code = ReadFlags(&argc, &argv, &options, &config);
-  if (exit_code >= 0)
-    return exit_code;
-
-  /// TODO: we need a protobuf message to ask the daemon to change dir?
-  if (options.working_dir) {
-    // The formatting of this string, complete with funny quotes, is
-    // so Emacs can properly identify that the cwd has changed for
-    // subsequent commands.
-    if (chdir(options.working_dir) < 0) {
-      Fatal("chdir to '%s' - %s", options.working_dir, strerror(errno));
-    }
+int stop_daemon() {
+  std::unique_ptr<Client> client(new Client("/tmp/ninja-extended"));
+  if (!client->Connect()) {
+    printf("Daemon is not running\n");
+    return 0;
   }
 
+  printf("Stopping daemon...\n");
+  client->StopDaemon();
+  return 0;
+}
+
+int build(const char* ninja_command, const BuildConfig& config,
+    const Options& options) {
   std::unique_ptr<Client> client(new Client("/tmp/ninja-extended"));
 
   if (!client->Connect()) {
@@ -338,6 +335,34 @@ int real_main(int argc, char** argv) {
   client->Build();
 
   return 0;
+}
+
+int real_main(int argc, char** argv) {
+  BuildConfig config;
+  Options options = {};
+  options.input_file = "build.ninja";
+
+  setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
+  const char* ninja_command = argv[0];
+
+  int exit_code = ReadFlags(&argc, &argv, &options, &config);
+  if (exit_code >= 0)
+    return exit_code;
+
+  /// TODO: we need a protobuf message to ask the daemon to change dir?
+  if (options.working_dir) {
+    // The formatting of this string, complete with funny quotes, is
+    // so Emacs can properly identify that the cwd has changed for
+    // subsequent commands.
+    if (chdir(options.working_dir) < 0) {
+      Fatal("chdir to '%s' - %s", options.working_dir, strerror(errno));
+    }
+  }
+
+  if (config.stop_daemon)
+    return stop_daemon();
+  else
+    return build(ninja_command, config, options);
 }
 
 int main(int argc, char** argv) {

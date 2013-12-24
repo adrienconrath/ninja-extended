@@ -18,7 +18,7 @@
 #include "comms.h"
 
 Comms::Comms(const string& socketName)
-  : endpoint_(socketName)
+  : stopped_(false), endpoint_(socketName)
   , acceptor_(bg_processor_.Service())
   , socket_(bg_processor_.Service()) {
   ::unlink(socketName.c_str());
@@ -31,6 +31,13 @@ Comms::Comms(const string& socketName)
 }
 
 Comms::~Comms() {
+  // TODO: verify that the communicator_ has been stopped before destroying
+  // this object.
+}
+
+void Comms::SetOnStopCmdFn(const OnStopCmdFn& on_stop_cmd)
+{
+  on_stop_cmd_ = on_stop_cmd;
 }
 
 void Comms::SetOnBuildCmdFn(const OnBuildCmdFn& on_build_cmd)
@@ -62,8 +69,6 @@ void Comms::OnAccept(const boost::system::error_code& err) {
       boost::bind(&Comms::OnStopRequest, this, _1, _2));
   communicator_->SetRequestHandler<NinjaMessage::BuildRequest>(
       boost::bind(&Comms::OnBuildRequest, this, _1, _2));
-
-  // TODO: set handler so that the communicator can inform we are disconnected.
 }
 
 void Comms::OnConnectionClosed() {
@@ -73,8 +78,10 @@ void Comms::OnConnectionClosed() {
   socket_.close();
   communicator_.reset(0);
 
-  // When the connection is closed, we can start accepting again.
-  AsyncAccept();
+  if (!stopped_) {
+    // When the connection is closed, we can start accepting again.
+    AsyncAccept();
+  }
 }
 
 void Comms::OnBuildCompleted(int request_id) {
@@ -92,9 +99,19 @@ void Comms::OnBuildRequest(int request_id, const NinjaMessage::BuildRequest& req
   }
 }
 
+void Comms::OnCloseCompleted() {
+  if (on_stop_cmd_) {
+    on_stop_cmd_();
+  }
+}
+
 void Comms::OnStopRequest(int request_id, const NinjaMessage::StopRequest& req)
 {
-  printf("OnStopRequest\n");
+  // Response immediately.
+  NinjaMessage::StopResponse response;
+  communicator_->SendReply(request_id, response);
+  printf("Server: stopping...\n");
 
-  // TODO: stop the daemon.
+  stopped_ = true;
+  communicator_->AsyncClose(boost::bind(&Comms::OnCloseCompleted, this));
 }

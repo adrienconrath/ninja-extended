@@ -125,8 +125,9 @@ struct CommandRunner {
 
 /// Options (e.g. verbosity, parallelism) passed to a build.
 struct BuildConfig {
-  BuildConfig() : verbosity(NORMAL), dry_run(false), parallelism(1),
-                  failures_allowed(1), max_load_average(-0.0f) {}
+  BuildConfig() : verbosity(NORMAL), stop_daemon(false),
+  dry_run(false), parallelism(1), failures_allowed(1),
+  max_load_average(-0.0f) {}
 
   enum Verbosity {
     NORMAL,
@@ -134,6 +135,7 @@ struct BuildConfig {
     VERBOSE
   };
   Verbosity verbosity;
+  bool stop_daemon;
   bool dry_run;
   int parallelism;
   int failures_allowed;

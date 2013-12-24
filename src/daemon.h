@@ -142,6 +142,10 @@ struct Daemon {
   void TriggerBuildMoveToMainThread(const OnBuildCompletedFn& onBuildCompleted);
   void TriggerBuild(const OnBuildCompletedFn& onBuildCompleted);
 
+  /// Called when a client has requested the daemon to stop.
+  void TriggerStopMoveToMainThread();
+  void TriggerStop();
+
   void BuildDirtySetMoveToMainThread(const OnBuildCompletedFn& onBuildCompleted,
     const boost::shared_ptr<vector<Node*>>& changed_files);
   bool BuildDirtySet(const OnBuildCompletedFn& onBuildCompleted,

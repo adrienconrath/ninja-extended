@@ -118,7 +118,11 @@ Daemon::Daemon(const char* ninja_command, const BuildConfig& config,
   file_monitor_(&state_), comms_("/tmp/ninja-extended"), continue_(true) {
     // Hook up the build command to its handler.
     comms_.SetOnBuildCmdFn(
-	boost::bind(&Daemon::TriggerBuildMoveToMainThread, this, _1));
+        boost::bind(&Daemon::TriggerBuildMoveToMainThread, this, _1));
+
+    // Hook up the stop command to its handler.
+    comms_.SetOnStopCmdFn(
+        boost::bind(&Daemon::TriggerStopMoveToMainThread, this));
 
     Load();
   }
@@ -134,7 +138,7 @@ bool Daemon::RebuildManifest(const char* input_file, string* err) {
     return false;
 
   Builder builder(&state_, config_, &build_log_, &deps_log_, &disk_interface_,
-    &file_monitor_);
+      &file_monitor_);
   if (!builder.AddTarget(node, err))
     return false;
 
@@ -193,7 +197,7 @@ Node* Daemon::CollectTarget(const char* cpath, string* err) {
 }
 
 bool Daemon::CollectTargetsFromArgs(int argc, char* argv[],
-                                       vector<Node*>* targets, string* err) {
+    vector<Node*>* targets, string* err) {
   if (argc == 0) {
     *targets = state_.DefaultNodes(err);
     return err->empty();
@@ -253,9 +257,9 @@ int Daemon::ToolQuery(int argc, char* argv[]) {
     }
     printf("  outputs:\n");
     for (vector<Edge*>::const_iterator edge = node->out_edges().begin();
-         edge != node->out_edges().end(); ++edge) {
+        edge != node->out_edges().end(); ++edge) {
       for (vector<Node*>::iterator out = (*edge)->outputs_.begin();
-           out != (*edge)->outputs_.end(); ++out) {
+          out != (*edge)->outputs_.end(); ++out) {
         printf("    %s\n", (*out)->path().c_str());
       }
     }
@@ -267,7 +271,7 @@ int Daemon::ToolDeps(int argc, char** argv) {
   vector<Node*> nodes;
   if (argc == 0) {
     for (vector<Node*>::const_iterator ni = deps_log_.nodes().begin();
-         ni != deps_log_.nodes().end(); ++ni) {
+        ni != deps_log_.nodes().end(); ++ni) {
       // Only query for targets with an incoming edge and deps
       Edge* e = (*ni)->in_edge();
       if (e && !e->GetBinding("deps").empty())
@@ -283,7 +287,7 @@ int Daemon::ToolDeps(int argc, char** argv) {
 
   RealDiskInterface disk_interface;
   for (vector<Node*>::iterator it = nodes.begin(), end = nodes.end();
-       it != end; ++it) {
+      it != end; ++it) {
     DepsLog::Deps* deps = deps_log_.GetDeps(*it);
     if (!deps) {
       printf("%s: deps not found\n", (*it)->path().c_str());
@@ -292,8 +296,8 @@ int Daemon::ToolDeps(int argc, char** argv) {
 
     TimeStamp mtime = disk_interface.Stat((*it)->path());
     printf("%s: #deps %d, deps mtime %d (%s)\n",
-           (*it)->path().c_str(), deps->node_count, deps->mtime,
-           (!mtime || mtime > deps->mtime ? "STALE":"VALID"));
+        (*it)->path().c_str(), deps->node_count, deps->mtime,
+        (!mtime || mtime > deps->mtime ? "STALE":"VALID"));
     for (int i = 0; i < deps->node_count; ++i)
       printf("    %s\n", deps->nodes[i]->path().c_str());
     printf("\n");
@@ -321,10 +325,10 @@ int Daemon::ToolTargets(int argc, char* argv[]) {
       return ToolTargetsList(&state_);
     } else {
       const char* suggestion =
-          SpellcheckString(mode.c_str(), "rule", "depth", "all", NULL);
+        SpellcheckString(mode.c_str(), "rule", "depth", "all", NULL);
       if (suggestion) {
         Error("unknown target tool mode '%s', did you mean '%s'?",
-              mode.c_str(), suggestion);
+            mode.c_str(), suggestion);
       } else {
         Error("unknown target tool mode '%s'", mode.c_str());
       }
@@ -370,21 +374,21 @@ int Daemon::ToolClean(int argc, char* argv[]) {
   int opt;
   while ((opt = getopt(argc, argv, const_cast<char*>("hgr"))) != -1) {
     switch (opt) {
-    case 'g':
-      generator = true;
-      break;
-    case 'r':
-      clean_rules = true;
-      break;
-    case 'h':
-    default:
-      printf("usage: ninja -t clean [options] [targets]\n"
-"\n"
-"options:\n"
-"  -g     also clean files marked as ninja generator output\n"
-"  -r     interpret targets as a list of rules to clean instead\n"
-             );
-    return 1;
+      case 'g':
+        generator = true;
+        break;
+      case 'r':
+        clean_rules = true;
+        break;
+      case 'h':
+      default:
+        printf("usage: ninja -t clean [options] [targets]\n"
+            "\n"
+            "options:\n"
+            "  -g     also clean files marked as ninja generator output\n"
+            "  -r     interpret targets as a list of rules to clean instead\n"
+            );
+        return 1;
     }
   }
   argv += optind;
@@ -421,7 +425,7 @@ int Daemon::ToolCompilationDatabase(int argc, char* argv[]) {
 
   putchar('[');
   for (vector<Edge*>::iterator e = state_.edges_.begin();
-       e != state_.edges_.end(); ++e) {
+      e != state_.edges_.end(); ++e) {
     for (int i = 0; i != argc; ++i) {
       if ((*e)->rule_->name() == argv[i]) {
         if (!first)
@@ -458,16 +462,16 @@ int Daemon::ToolRecompact(int argc, char* argv[]) {
 int Daemon::ToolUrtle(int argc, char** argv) {
   // RLE encoded.
   const char* urtle =
-" 13 ,3;2!2;\n8 ,;<11!;\n5 `'<10!(2`'2!\n11 ,6;, `\\. `\\9 .,c13$ec,.\n6 "
-",2;11!>; `. ,;!2> .e8$2\".2 \"?7$e.\n <:<8!'` 2.3,.2` ,3!' ;,(?7\";2!2'<"
-"; `?6$PF ,;,\n2 `'4!8;<!3'`2 3! ;,`'2`2'3!;4!`2.`!;2 3,2 .<!2'`).\n5 3`5"
-"'2`9 `!2 `4!><3;5! J2$b,`!>;2!:2!`,d?b`!>\n26 `'-;,(<9!> $F3 )3.:!.2 d\""
-"2 ) !>\n30 7`2'<3!- \"=-='5 .2 `2-=\",!>\n25 .ze9$er2 .,cd16$bc.'\n22 .e"
-"14$,26$.\n21 z45$c .\n20 J50$c\n20 14$P\"`?34$b\n20 14$ dbc `2\"?22$?7$c"
-"\n20 ?18$c.6 4\"8?4\" c8$P\n9 .2,.8 \"20$c.3 ._14 J9$\n .2,2c9$bec,.2 `?"
-"21$c.3`4%,3%,3 c8$P\"\n22$c2 2\"?21$bc2,.2` .2,c7$P2\",cb\n23$b bc,.2\"2"
-"?14$2F2\"5?2\",J5$P\" ,zd3$\n24$ ?$3?%3 `2\"2?12$bcucd3$P3\"2 2=7$\n23$P"
-"\" ,3;<5!>2;,. `4\"6?2\"2 ,9;, `\"?2$\n";
+    " 13 ,3;2!2;\n8 ,;<11!;\n5 `'<10!(2`'2!\n11 ,6;, `\\. `\\9 .,c13$ec,.\n6 "
+    ",2;11!>; `. ,;!2> .e8$2\".2 \"?7$e.\n <:<8!'` 2.3,.2` ,3!' ;,(?7\";2!2'<"
+    "; `?6$PF ,;,\n2 `'4!8;<!3'`2 3! ;,`'2`2'3!;4!`2.`!;2 3,2 .<!2'`).\n5 3`5"
+    "'2`9 `!2 `4!><3;5! J2$b,`!>;2!:2!`,d?b`!>\n26 `'-;,(<9!> $F3 )3.:!.2 d\""
+    "2 ) !>\n30 7`2'<3!- \"=-='5 .2 `2-=\",!>\n25 .ze9$er2 .,cd16$bc.'\n22 .e"
+    "14$,26$.\n21 z45$c .\n20 J50$c\n20 14$P\"`?34$b\n20 14$ dbc `2\"?22$?7$c"
+    "\n20 ?18$c.6 4\"8?4\" c8$P\n9 .2,.8 \"20$c.3 ._14 J9$\n .2,2c9$bec,.2 `?"
+    "21$c.3`4%,3%,3 c8$P\"\n22$c2 2\"?21$bc2,.2` .2,c7$P2\",cb\n23$b bc,.2\"2"
+    "?14$2F2\"5?2\",J5$P\" ,zd3$\n24$ ?$3?%3 `2\"2?12$bcucd3$P3\"2 2=7$\n23$P"
+    "\" ,3;<5!>2;,. `4\"6?2\"2 ,9;, `\"?2$\n";
   int count = 0;
   for (const char* p = urtle; *p; p++) {
     if ('0' <= *p && *p <= '9') {
@@ -556,7 +560,7 @@ void Daemon::DumpMetrics() {
   int count = (int)state_.paths_.size();
   int buckets = (int)state_.paths_.bucket_count();
   printf("path->node hash load %.2f (%d entries / %d buckets)\n",
-         count / (double) buckets, count, buckets);
+      count / (double) buckets, count, buckets);
 }
 
 bool Daemon::EnsureBuildDirExists() {
@@ -564,7 +568,7 @@ bool Daemon::EnsureBuildDirExists() {
   if (!build_dir_.empty() && !config_.dry_run) {
     if (!disk_interface_.MakeDirs(build_dir_ + "/.") && errno != EEXIST) {
       Error("creating build directory %s: %s",
-            build_dir_.c_str(), strerror(errno));
+          build_dir_.c_str(), strerror(errno));
       return false;
     }
   }
@@ -572,26 +576,35 @@ bool Daemon::EnsureBuildDirExists() {
 }
 
 void Daemon::TriggerBuildMoveToMainThread(
-  const OnBuildCompletedFn& onBuildCompleted) {
+    const OnBuildCompletedFn& onBuildCompleted) {
   processor_.Post(boost::bind(&Daemon::TriggerBuild, this, onBuildCompleted));
+}
+
+void Daemon::TriggerStopMoveToMainThread() {
+  processor_.Post(boost::bind(&Daemon::TriggerStop, this));
 }
 
 void Daemon::TriggerBuild(const OnBuildCompletedFn& onBuildCompleted) {
   // Flush the file monitor so that we know what to rebuild.
   file_monitor_.Flush(boost::bind(
-    &Daemon::BuildDirtySetMoveToMainThread, this, onBuildCompleted, _1));
+        &Daemon::BuildDirtySetMoveToMainThread, this, onBuildCompleted, _1));
+}
+
+void Daemon::TriggerStop() {
+  // This will cause the processor to be stopped and the process to exit.
+  continue_ = false;
 }
 
 void Daemon::BuildDirtySetMoveToMainThread(const OnBuildCompletedFn& onBuildCompleted,
-  const boost::shared_ptr<vector<Node*>>& changed_files) {
+    const boost::shared_ptr<vector<Node*>>& changed_files) {
   processor_.Post(boost::bind(
-    &Daemon::BuildDirtySet, this, onBuildCompleted, changed_files));
+        &Daemon::BuildDirtySet, this, onBuildCompleted, changed_files));
 }
 
 bool Daemon::BuildDirtySet(const OnBuildCompletedFn& onBuildCompleted,
-  const boost::shared_ptr<vector<Node*>>& changed_files) {
+    const boost::shared_ptr<vector<Node*>>& changed_files) {
   for (vector<Node*>::iterator it = changed_files->begin();
-       it != changed_files->end(); ++it)
+      it != changed_files->end(); ++it)
   {
     string err;
     if (!MarkNodeDirty(*it, &err))
@@ -628,13 +641,13 @@ bool Daemon::MarkNodeDirty(Node* node, string* err)
   /// Only exploring output edges that are not an order only dependency.
   const vector<Edge*>& out_edges = node->not_order_only_out_edges();
   for (vector<Edge*>::const_iterator e = out_edges.begin();
-       e != out_edges.end() && *e != NULL; ++e) {
+      e != out_edges.end() && *e != NULL; ++e) {
     Edge* edge = *e;
 
     for (unsigned int i = 0; i < edge->outputs_.size(); ++i)
     {
       if (!MarkNodeDirty(edge->outputs_[i], err))
-	return false;
+        return false;
     }
   }
 
